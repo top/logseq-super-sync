@@ -11,7 +11,10 @@ on:
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
-
+    # Add these permissions to allow creating releases
+    permissions:
+      contents: write  # Required for creating releases and uploading assets
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
