@@ -2,7 +2,6 @@ import { Settings, DEFAULT_SETTINGS, settingsSchema } from './settings';
 import { BackupService } from '../services/backup-service';
 import { SyncService } from '../services/sync-service';
 import { setupToolbar } from '../ui/toolbar';
-import { setupEventHandlers } from './events';
 
 /**
  * Core plugin class that manages the overall plugin functionality
@@ -15,11 +14,11 @@ export class SuperSyncPlugin {
   /**
    * Creates a new instance of the plugin
    */
-  constructor() {
+  constructor(backupService: BackupService, syncService: SyncService) {
     // Initialize settings with defaults
-    this.settings = Object.assign({}, DEFAULT_SETTINGS);
-    this.backupService = new BackupService(this.settings);
-    this.syncService = new SyncService(this.settings);
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, logseq.settings);
+    this.backupService = backupService;
+    this.syncService = syncService;
   }
 
   /**
@@ -32,19 +31,8 @@ export class SuperSyncPlugin {
       // Register settings schema with Logseq
       logseq.useSettingsSchema(settingsSchema);
 
-      // Load user settings
-      this.settings = Object.assign({}, DEFAULT_SETTINGS, logseq.settings);
-      console.info('Settings loaded');
-
-      // Initialize services
-      await this.backupService.initialize();
-      await this.syncService.initialize();
-
       // Setup UI
       setupToolbar(this.settings, this.backupService);
-
-      // Setup event handlers
-      setupEventHandlers(this.backupService);
 
       // Register model for UI interaction
       this.registerModel();

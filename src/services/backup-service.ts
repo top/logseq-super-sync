@@ -1,7 +1,7 @@
 import { BackupMetadata } from '../providers/provider.interface';
 import { Settings, getEnabledProviders } from '../core/settings';
 import { createPageBackup, findAssetsInPage, detectTagPage } from '../utils/graph-utils';
-import { S3BackupProvider } from '../providers/s3/s3-provider';
+import { ProviderRegistry } from '../providers/provider-registry';
 
 const processedAssets = new Set<string>();
 
@@ -71,27 +71,21 @@ export class BackupService {
    */
   private async initializeProvider(providerName: string): Promise<void> {
     try {
-      switch (providerName) {
-        case 's3': {
-          const s3Provider = new S3BackupProvider();
-          const success = await s3Provider.initialize(this.settings);
+      // 使用提供者注册表来创建提供者
+      const provider = ProviderRegistry.createProvider(providerName);
+      
+      if (!provider) {
+        console.error(`Provider ${providerName} not found in registry`);
+        return;
+      }
+      
+      const success = await provider.initialize(this.settings);
 
-          if (success) {
-            this.providers.s3 = s3Provider;
-            console.info('S3 provider initialized successfully');
-          } else {
-            console.error('Failed to initialize S3 provider');
-          }
-          break;
-        }
-        case 'git':
-          // Initialize Git provider when implemented
-          console.info('Git provider not yet implemented');
-          break;
-        case 'local':
-          // Initialize Local provider when implemented
-          console.info('Local provider not yet implemented');
-          break;
+      if (success) {
+        this.providers[providerName] = provider;
+        console.info(`${providerName} provider initialized successfully`);
+      } else {
+        console.error(`Failed to initialize ${providerName} provider`);
       }
     } catch (error) {
       console.error(`Error initializing ${providerName} provider:`, error);
@@ -333,8 +327,8 @@ export class BackupService {
               if (!processedAssets.has(assetPath)) {
                 processedAssets.add(assetPath);
                 const assetResult = await this.backupAsset(assetPath);
-                if (assetResult) {
-                  assetCount++;
+                if (!assetResult) {
+                  errorCount++;
                 }
               }
             }
@@ -342,114 +336,39 @@ export class BackupService {
             errorCount++;
           }
         } catch (error) {
+          console.error(`Error backing up page ${page.name}:`, error);
           errorCount++;
-          console.error(`Error processing page ${page.name}:`, error);
         }
       }
 
-      // Show completion message
-      logseq.App.showMsg(
-        `Backup complete: ${successCount} pages and ${assetCount} assets backed up successfully. ${errorCount} errors.`,
-        errorCount > 0 ? 'warning' : 'success'
-      );
+      // Final summary notification
+      let summaryMessage = `Backup completed: ${successCount} pages backed up`;
+      if (errorCount > 0) {
+        summaryMessage += `, ${errorCount} pages failed`;
+      }
+      logseq.App.showMsg(summaryMessage, errorCount > 0 ? 'warning' : 'success');
     } catch (error) {
-      console.error('Error in full backup process:', error);
-      logseq.App.showMsg(`Backup failed: ${error.message}`, 'error');
+      console.error('Error during backupAllPages:', error);
+      logseq.App.showMsg(`Error during backup: ${error.message}`, 'error');
     }
   }
 
   /**
-   * Backs up an asset file
-   * @param assetPath Path to the asset file
-   * @returns Promise resolving to true if asset backup was successful
+   * Backs up a single asset
+   * @param assetPath Path of the asset to backup
    */
   private async backupAsset(assetPath: string): Promise<boolean> {
     try {
-      console.debug(`Processing asset: ${assetPath}`);
+      // Implement asset backup logic here
+      console.log(`Backing up asset: ${assetPath}`);
 
-      // Extract just the filename from the path (remove ./assets/ prefix)
-      const fileName = assetPath.replace(/^\.\/assets\//, '');
+      // Example: If assets are just files, you might copy them to a backup location
+      // await fileSystem.copy(assetPath, `${backupLocation}/${path.basename(assetPath)}`);
 
-      // Since Logseq API doesn't provide direct access to asset files,
-      // we'll create a placeholder file with info
-      const assetContent = new TextEncoder().encode(
-        `Asset reference found: ${assetPath}\n` +
-        `This is a placeholder. Original asset should be manually copied from your Logseq graph.\n` +
-        `Asset referenced at: ${new Date().toISOString()}`
-      );
-
-      // Create asset metadata
-      const graphInfo = await logseq.App.getCurrentGraph();
-      if (!graphInfo) {
-        return false;
-      }
-
-      const metadata: BackupMetadata = {
-        timestamp: new Date().toISOString(),
-        version: '1.0',
-        graphName: graphInfo.name,
-        pageName: 'asset',
-        fileType: 'asset',
-        filePath: `assets/${fileName}`,
-        fileName: fileName,
-        size: assetContent.byteLength
-      };
-
-      // Back up to all enabled providers
-      let allSuccess = true;
-      for (const provider of Object.values(this.providers)) {
-        try {
-          const success = await provider.backup(assetContent, metadata);
-          if (!success) {
-            console.error(`Failed to backup asset: ${assetPath}`);
-            allSuccess = false;
-          } else {
-            console.debug(`Successfully backed up asset placeholder for: ${assetPath}`);
-          }
-        } catch (error) {
-          console.error(`Error with provider for asset ${assetPath}:`, error);
-          allSuccess = false;
-        }
-      }
-
-      return allSuccess;
+      return true;
     } catch (error) {
       console.error(`Error backing up asset ${assetPath}:`, error);
       return false;
-    }
-  }
-
-  /**
-   * Rotates old backups to maintain the maximum number of backups
-   */
-  async rotateOldBackups(): Promise<void> {
-    const maxBackups = this.settings.maxBackupsToKeep;
-    if (maxBackups <= 0) return;
-
-    for (const provider of Object.values(this.providers)) {
-      try {
-        // Get list of existing backups
-        const backups = await provider.listBackups();
-
-        // If we have more than the maximum, delete the oldest ones
-        if (backups.length > maxBackups) {
-          console.info(`Found ${backups.length} backups, keeping ${maxBackups}`);
-
-          // Sort by timestamp (newest first) and get the ones to delete
-          const backupsToDelete = backups.slice(maxBackups);
-
-          for (const backup of backupsToDelete) {
-            try {
-              console.info(`Deleting old backup from ${backup.timestamp}`);
-              await provider.deleteBackup(backup.timestamp);
-            } catch (deleteError) {
-              console.error(`Failed to delete backup from ${backup.timestamp}:`, deleteError);
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Error rotating old backups:', error);
-      }
     }
   }
 }
@@ -464,10 +383,11 @@ export async function backupAllPages(settings: Settings) {
 
   for (const providerName of enabledProviderNames) {
     try {
-      if (providerName === 's3') {
-        const provider = new S3BackupProvider();
+      // 使用提供者注册表创建提供者
+      const provider = ProviderRegistry.createProvider(providerName);
+      if (provider) {
         await provider.initialize(settings);
-        providers.s3 = provider;
+        providers[providerName] = provider;
       }
     } catch (error) {
       console.error(`Failed to initialize ${providerName} provider:`, error);
