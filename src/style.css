@@ -1,0 +1,20 @@
+/* Toolbar icon styling */
+.super-sync-icon {
+  font-size: 20px;
+  cursor: pointer;
+}
+
+/* Animation for backup in progress */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.super-sync-icon.loading {
+  animation: spin 2s linear infinite;
+}

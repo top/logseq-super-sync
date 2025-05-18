@@ -1,0 +1,43 @@
+{
+  "name": "logseq-super-sync",
+  "version": "1.0.0",
+  "description": "Auto-backup your Logseq graph to S3 and other cloud storage",
+  "main": "dist/index.html",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "author": "ie9.org",
+  "license": "MIT",
+  "logseq": {
+    "title": "Super Sync",
+    "description": "Automatic backup and sync for your Logseq graph to S3 and other cloud storage.",
+    "author": "ie9.org",
+    "repo": "top/logseq-super-sync",
+    "icon": "icon.png",
+    "id": "logseq-super-sync"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/top/logseq-super-sync"
+  },
+  "keywords": [
+    "logseq",
+    "logseq-plugin",
+    "backup",
+    "sync",
+    "s3",
+    "cloud storage"
+  ],
+  "dependencies": {
+    "@logseq/libs": "^0.0.15",
+    "@aws-sdk/client-s3": "^3.418.0",
+    "@aws-sdk/lib-storage": "^3.418.0",
+    "jszip": "^3.10.1"
+  },
+  "devDependencies": {
+    "typescript": "^4.9.3",
+    "vite": "^4.3.9",
+    "path": "^0.12.7"
+  }
+}
