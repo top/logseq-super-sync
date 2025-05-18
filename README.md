@@ -1,6 +1,6 @@
 # Logseq Super Sync
 
-![GitHub License](https://img.shields.io/github/license/your-username/logseq-super-sync)
+![GitHub License](https://img.shields.io/github/license/top/logseq-super-sync)
 ![Logseq Plugin](https://img.shields.io/badge/Logseq-Plugin-blue)
 
 ![Logseq Super Sync](icon.png)
