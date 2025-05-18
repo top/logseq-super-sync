@@ -181,7 +181,9 @@ export class BackupService {
     }
 
     // If backup is enabled, perform backup for each modified page
-    if (this.settings.backupEnabled && getEnabledProviders(this.settings).length > 0 && modifiedPages.size > 0) {
+    if (this.settings.backupTrigger === "automatic" && 
+        getEnabledProviders(this.settings).length > 0 && 
+        modifiedPages.size > 0) {
       console.info(`Found ${modifiedPages.size} modified pages to backup`);
 
       try {
