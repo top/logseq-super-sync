@@ -8,7 +8,6 @@ import {
   DeleteObjectCommand,
   HeadObjectCommand
 } from '@aws-sdk/client-s3';
-import { calculateMd5 } from '../../utils/file-utils';
 
 /**
  * Provider for S3-compatible storage services
@@ -63,30 +62,7 @@ export class S3BackupProvider implements BackupProvider {
     try {
       const key = this.generateBackupKey(metadata);
 
-      // Check if file exists and is identical before uploading
-      try {
-        const existingObject = await this.s3Client.send(new HeadObjectCommand({
-          Bucket: this.settings.s3_bucketName,
-          Key: key
-        }));
-
-        // Calculate MD5 of local data
-        const localMd5 = calculateMd5(data);
-
-        // If ETags match (S3 uses MD5 as ETag for simple objects), files are identical
-        // Note: S3 ETag is quoted, so we need to remove quotes when comparing
-        const remoteEtag = existingObject.ETag ? existingObject.ETag.replace(/"/g, '') : '';
-
-        if (remoteEtag === localMd5) {
-          console.info(`File unchanged, skipping upload: ${key}`);
-          return true; // Report success without actually uploading
-        }
-      } catch (error) {
-        // Object doesn't exist or other error, proceed with upload
-        console.debug(`No existing object found or error checking: ${key}`);
-      }
-
-      // Proceed with upload since file doesn't exist or has changed
+      // Proceed with upload directly without file existence check
       console.info(`Backing up to ${this.settings.s3_customEndpoint ? 'custom S3' : 'AWS S3'}:`, {
         bucketName: this.settings.s3_bucketName,
         region: this.settings.s3_region,
@@ -112,7 +88,6 @@ export class S3BackupProvider implements BackupProvider {
         Key: key,
         Body: data,
         ContentType: contentType,
-        ContentMD5: calculateMd5(data), // Add MD5 hash for S3 to validate integrity
         Metadata: {
           'graph-name': metadata.graphName,
           'backup-version': metadata.version,
