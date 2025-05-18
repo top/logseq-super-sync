@@ -46,7 +46,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ steps.package-version.outputs.current-version }}
-          name: Release v${{ steps.package-version.outputs.current-version }}
+          name: logseq-super-sync v${{ steps.package-version.outputs.current-version }}
           files: logseq-super-sync-${{ steps.package-version.outputs.current-version }}.zip
           draft: false
           prerelease: false
