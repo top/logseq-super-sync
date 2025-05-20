@@ -1,6 +1,6 @@
 {
   "name": "logseq-super-sync",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Auto-backup your Logseq graph to S3 and other cloud storage",
   "main": "dist/index.html",
   "scripts": {

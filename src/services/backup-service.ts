@@ -1,4 +1,3 @@
-import { BackupMetadata } from '../providers/provider.interface';
 import { Settings, getEnabledProviders } from '../core/settings';
 import { createPageBackup, findAssetsInPage, detectTagPage } from '../utils/graph-utils';
 import { ProviderRegistry } from '../providers/provider-registry';
@@ -71,14 +70,13 @@ export class BackupService {
    */
   private async initializeProvider(providerName: string): Promise<void> {
     try {
-      // 使用提供者注册表来创建提供者
       const provider = ProviderRegistry.createProvider(providerName);
-      
+
       if (!provider) {
         console.error(`Provider ${providerName} not found in registry`);
         return;
       }
-      
+
       const success = await provider.initialize(this.settings);
 
       if (success) {
@@ -98,7 +96,7 @@ export class BackupService {
    * @param changes Array of change events
    */
   async processChanges(changes: Array<{ blocks: any[], txData: any, txMeta: any }>): Promise<void> {
-    if (changes.length === 0 || !this.settings.backupEnabled) return;
+    if (changes.length === 0) return;
 
     console.info(`Processing ${changes.length} change events`);
 
@@ -175,22 +173,16 @@ export class BackupService {
     }
 
     // If backup is enabled, perform backup for each modified page
-    if (this.settings.backupTrigger === "automatic" && 
-        getEnabledProviders(this.settings).length > 0 && 
-        modifiedPages.size > 0) {
-      console.info(`Found ${modifiedPages.size} modified pages to backup`);
+    console.info(`Found ${modifiedPages.size} modified pages to backup`);
 
-      try {
-        // Backup each modified page
-        for (const pageName of modifiedPages) {
-          await this.backupPage(pageName);
-        }
-      } catch (backupError) {
-        console.error('Error performing backups:', backupError);
-        logseq.App.showMsg('Backup failed. Check console for details.', 'error');
+    try {
+      // Backup each modified page
+      for (const pageName of modifiedPages) {
+        await this.backupPage(pageName);
       }
-    } else if (modifiedPages.size === 0) {
-      console.info('No pages were modified in this change set');
+    } catch (backupError) {
+      console.error('Error performing backups:', backupError);
+      logseq.UI.showMsg('Backup failed. Check console for details.', 'error');
     }
   }
 
@@ -225,18 +217,18 @@ export class BackupService {
       const providerCount = Object.keys(this.providers).length;
 
       if (successCount === providerCount) {
-        logseq.App.showMsg(`Backup of ${pageName} completed successfully`, 'success');
+        logseq.UI.showMsg(`Backup of ${pageName} completed successfully`, 'success');
       } else if (successCount > 0) {
-        logseq.App.showMsg(
+        logseq.UI.showMsg(
           `Backup of ${pageName} partially completed (${successCount}/${providerCount} providers)`,
           'warning'
         );
       } else {
-        logseq.App.showMsg(`Backup of ${pageName} failed`, 'error');
+        logseq.UI.showMsg(`Backup of ${pageName} failed`, 'error');
       }
     } catch (error) {
       console.error(`Error creating backup for page ${pageName}:`, error);
-      logseq.App.showMsg(`Backup failed: ${error.message}`, 'error');
+      logseq.UI.showMsg(`Backup failed: ${error.message}`, 'error');
     }
   }
 
@@ -246,12 +238,12 @@ export class BackupService {
   async backupAllPages(): Promise<void> {
     try {
       // Show progress notification
-      logseq.App.showMsg('Starting full vault backup...', 'info');
+      logseq.UI.showMsg('Starting full vault backup...', 'info');
 
       // Get all pages
       const allPages = await logseq.Editor.getAllPages();
       if (!allPages || allPages.length === 0) {
-        logseq.App.showMsg('No pages found in the current graph', 'warning');
+        logseq.UI.showMsg('No pages found in the current graph', 'warning');
         return;
       }
 
@@ -260,14 +252,13 @@ export class BackupService {
       // Get enabled providers
       const enabledProviderNames = getEnabledProviders(this.settings);
       if (enabledProviderNames.length === 0) {
-        logseq.App.showMsg('No backup providers enabled. Please configure a provider first.', 'warning');
+        logseq.UI.showMsg('No backup providers enabled. Please configure a provider first.', 'warning');
         return;
       }
 
       // Initialize tracking variables
       let successCount = 0;
       let errorCount = 0;
-      let assetCount = 0;
 
       // Reset processed assets set
       processedAssets.clear();
@@ -278,7 +269,7 @@ export class BackupService {
         try {
           // Update progress periodically
           if (i % 10 === 0 || i === allPages.length - 1) {
-            logseq.App.showMsg(`Backing up pages: ${i + 1} of ${allPages.length}`, 'info');
+            logseq.UI.showMsg(`Backing up pages: ${i + 1} of ${allPages.length}`, 'info');
           }
 
           // Skip special system pages
@@ -346,10 +337,10 @@ export class BackupService {
       if (errorCount > 0) {
         summaryMessage += `, ${errorCount} pages failed`;
       }
-      logseq.App.showMsg(summaryMessage, errorCount > 0 ? 'warning' : 'success');
+      logseq.UI.showMsg(summaryMessage, errorCount > 0 ? 'warning' : 'success');
     } catch (error) {
       console.error('Error during backupAllPages:', error);
-      logseq.App.showMsg(`Error during backup: ${error.message}`, 'error');
+      logseq.UI.showMsg(`Error during backup: ${error.message}`, 'error');
     }
   }
 
@@ -383,7 +374,6 @@ export async function backupAllPages(settings: Settings) {
 
   for (const providerName of enabledProviderNames) {
     try {
-      // 使用提供者注册表创建提供者
       const provider = ProviderRegistry.createProvider(providerName);
       if (provider) {
         await provider.initialize(settings);

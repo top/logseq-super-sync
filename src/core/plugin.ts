@@ -40,10 +40,10 @@ export class SuperSyncPlugin {
       console.info('Plugin initialized successfully');
 
       // Show welcome message
-      logseq.App.showMsg('Logseq Super Sync plugin loaded successfully!', 'success');
+      logseq.UI.showMsg('Logseq Super Sync plugin loaded successfully!', 'success');
     } catch (error) {
       console.error('Failed to initialize plugin:', error);
-      logseq.App.showMsg('Failed to initialize plugin. See console for details.', 'error');
+      logseq.UI.showMsg('Failed to initialize plugin. See console for details.', 'error');
     }
   }
 
@@ -58,11 +58,11 @@ export class SuperSyncPlugin {
           if (currentPage) {
             await this.backupService.backupPage(currentPage.name);
           } else {
-            logseq.App.showMsg('No page is currently open', 'warning');
+            logseq.UI.showMsg('No page is currently open', 'warning');
           }
         } catch (error) {
           console.error('Error backing up current page:', error);
-          logseq.App.showMsg('Backup failed. See console for details.', 'error');
+          logseq.UI.showMsg('Backup failed. See console for details.', 'error');
         }
       },
 
@@ -71,7 +71,7 @@ export class SuperSyncPlugin {
           await this.backupService.backupAllPages();
         } catch (error) {
           console.error('Error in full backup:', error);
-          logseq.App.showMsg('Full backup failed. See console for details.', 'error');
+          logseq.UI.showMsg('Full backup failed. See console for details.', 'error');
         }
       }
     });

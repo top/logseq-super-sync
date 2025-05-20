@@ -11,13 +11,13 @@ export function setupToolbar(settings: Settings, backupService?: BackupService) 
   logseq.Editor.registerSlashCommand(
     'Backup All Pages',
     async () => {
-      logseq.App.showMsg('Starting backup of all pages...');
+      logseq.UI.showMsg('Starting backup of all pages...');
 
       if (backupService) {
         await backupService.backupAllPages();
       } else {
         // Call through the model when no direct service reference
-        logseq.App.showMsg('Starting backup of all pages...');
+        logseq.UI.showMsg('Starting backup of all pages...');
         logseq.provideUI({
           key: 'backupAllPages',
           slot: '',
@@ -41,7 +41,7 @@ export function setupToolbar(settings: Settings, backupService?: BackupService) 
   logseq.provideModel({
     async startFullBackup() {
       // Show immediate feedback
-      logseq.App.showMsg('Starting full backup of all pages and assets...', 'info');
+      logseq.UI.showMsg('Starting full backup of all pages and assets...', 'info');
 
       try {
         if (backupService) {
@@ -52,7 +52,7 @@ export function setupToolbar(settings: Settings, backupService?: BackupService) 
         }
       } catch (error) {
         console.error('Error during backup:', error);
-        logseq.App.showMsg('Backup failed. See console for details.', 'error');
+        logseq.UI.showMsg('Backup failed. See console for details.', 'error');
       }
     }
   });

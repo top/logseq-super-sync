@@ -11,36 +11,11 @@ export const settingsSchema: SettingSchemaDesc[] = [
     icon: "ti ti-cloud-upload"
   },
   {
-    key: "backupTrigger",
-    type: "enum",
-    title: "Backup trigger",
-    description: "When should backups be performed",
-    enumChoices: ["automatic", "manual"],
-    enumPicker: "select",
-    default: "automatic",
-  },
-  {
     key: "debounceTime",
     type: "number",
     title: "Wait time before backup (seconds)",
     description: "How long to wait after changes before triggering a backup",
     default: 5,
-  },
-  {
-    key: "backupFrequency",
-    type: "enum",
-    title: "Backup frequency",
-    description: "How often to perform backups when changes are detected",
-    enumChoices: ["afterEveryChange", "oncePerHour", "oncePerDay"],
-    enumPicker: "select",
-    default: "afterEveryChange",
-  },
-  {
-    key: "maxBackupsToKeep",
-    type: "number",
-    title: "Maximum number of backups to keep",
-    description: "Older backups will be deleted (0 = keep all)",
-    default: 10,
   },
   {
     key: "separator1",
@@ -145,10 +120,7 @@ export const settingsSchema: SettingSchemaDesc[] = [
 
 // Default settings
 export const DEFAULT_SETTINGS = {
-  backupTrigger: "automatic",
   debounceTime: 5,
-  backupFrequency: "afterEveryChange",
-  maxBackupsToKeep: 10,
 
   // S3 settings
   s3_bucketName: "",
@@ -168,15 +140,8 @@ export const DEFAULT_SETTINGS = {
   // local_path: ""
 };
 
-// Type definitions
-export type BackupFrequencyType = "afterEveryChange" | "oncePerHour" | "oncePerDay";
-export type BackupTriggerType = "automatic" | "manual";
-
 export interface Settings {
-  backupTrigger: BackupTriggerType;
   debounceTime: number;
-  backupFrequency: BackupFrequencyType;
-  maxBackupsToKeep: number;
 
   // S3 settings
   s3_bucketName: string;
@@ -200,10 +165,7 @@ export interface Settings {
 export function groupProviderSettings(settings: Settings) {
   return {
     general: {
-      backupTrigger: settings.backupTrigger,
       debounceTime: settings.debounceTime,
-      backupFrequency: settings.backupFrequency,
-      maxBackupsToKeep: settings.maxBackupsToKeep,
     },
     s3: {
       bucketName: settings.s3_bucketName,
