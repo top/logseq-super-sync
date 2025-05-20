@@ -2,9 +2,6 @@ import { defineConfig } from 'vite';
 import { resolve } from 'path';
 import fs from 'fs';
 
-// Generate minimal icon (1x1 transparent pixel)
-const iconData = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
-
 // Read the actual version from the project's package.json
 const projectPackageJson = JSON.parse(fs.readFileSync('./package.json', 'utf-8'));
 
@@ -47,15 +44,19 @@ export default defineConfig({
       writeBundle: async () => {
         // Write package.json
         fs.writeFileSync(
-          resolve(__dirname, 'dist/package.json'), 
+          resolve(__dirname, 'dist/package.json'),
           JSON.stringify(packageJson, null, 2)
         );
-        
-        // Write icon
-        fs.writeFileSync(
-          resolve(__dirname, 'dist/icon.png'),
-          Buffer.from(iconData, 'base64')
-        );
+
+        // Copy icon.png file from project directory to dist
+        if (fs.existsSync('./icon.png')) {
+          fs.copyFileSync(
+            './icon.png',
+            resolve(__dirname, 'dist/icon.png')
+          );
+        } else {
+          console.warn('Warning: icon.png not found in project directory');
+        }
       },
     },
   ],
