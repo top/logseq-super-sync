@@ -5,11 +5,14 @@ import fs from 'fs';
 // Generate minimal icon (1x1 transparent pixel)
 const iconData = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
+// Read the actual version from the project's package.json
+const projectPackageJson = JSON.parse(fs.readFileSync('./package.json', 'utf-8'));
+
 // Plugin metadata
 const packageJson = {
   name: "logseq-super-sync",
-  version: "0.0.1",
-  main: "index.js",
+  version: projectPackageJson.version,
+  main: "dist/index.html",
   logseq: {
     id: "logseq-super-sync",
     title: "Logseq Super Sync",
