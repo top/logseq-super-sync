@@ -35,11 +35,6 @@ export function setupEventHandlers(backupService: BackupService): void {
       // Update last edit timestamp
       debounceData.lastEditTimestamp = Date.now();
 
-      // Only process if automatic backup is enabled
-      if (backupService.settings.backupTrigger !== "automatic") {
-        return;
-      }
-
       // If already processing, don't interfere with the process
       if (debounceData.isProcessing) {
         return;

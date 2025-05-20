@@ -72,6 +72,11 @@ export class SyncService {
         }
       }
     }
+
+    // Clear cached backups on settings change
+    for (const provider of this.providers.values()) {
+      (provider as any)._cachedBackups = null;
+    }
   }
 
   /**
@@ -83,9 +88,18 @@ export class SyncService {
     try {
       // Get list of pages to sync
       const pages = await logseq.Editor.getAllPages() || [];
-      console.debug('>>> Pages to sync:', JSON.stringify(pages));
+      
+      // For each provider, get the full backup list ONCE
+      for (const [providerName, provider] of this.providers.entries()) {
+        if (!this.isProviderEnabled(providerName)) continue;
+        
+        // Get all backups for this provider
+        const backups = await provider.listBackups();
+        (provider as any)._cachedBackups = backups;
+        console.info(`Retrieved ${backups.length} backups from ${providerName}`);
+      }
 
-      // Compare local and remote versions for each page
+      // Now process each page with cached backups
       for (const page of pages) {
         await this.syncPage(page.name);
       }
@@ -107,7 +121,7 @@ export class SyncService {
         return;
       }
 
-      const filePath = this.getPageFilePath(page);
+      const filePath = await this.getPageFilePath(page); // Changed to await
       if (!filePath) {
         console.warn(`File path not found for page: ${pageName}`);
         return;
@@ -159,8 +173,53 @@ export class SyncService {
     }
   }
 
-  private getPageFilePath(page: any): string | null {
-    return page.file?.path || null;
+  private async getPageFilePath(page: any): Promise<string | null> {
+    try {
+      // Get the current graph name
+      const graph = await logseq.App.getCurrentGraph();
+      const graphName = graph?.name || 'default';
+
+      let fileName: string;
+      let basePath: string;
+
+      // For journal pages, construct path from journalDay
+      if (page['journal?'] === true && page.journalDay) {
+        const journalDayStr = String(page.journalDay);
+        const year = journalDayStr.substring(0, 4);
+        const month = journalDayStr.substring(4, 6);
+        const day = journalDayStr.substring(6, 8);
+        fileName = `${year}_${month}_${day}.md`;
+        basePath = `journals/${fileName}`;
+      }
+      // For regular pages with file path
+      else if (page.file?.path) {
+        // If path already has the graph name, use it directly
+        if (page.file.path.includes(`/${graphName}/`)) {
+          return page.file.path;
+        }
+        
+        // Otherwise construct proper path
+        return `${graphName}/${page.file.path}`;
+      }
+      // Fallback: construct path from page name
+      else if (page.name) {
+        fileName = `${page.name.replace(/ /g, '_').replace(/[^\w\d_.-]/g, '').toLowerCase()}.md`;
+        basePath = `pages/${fileName}`;
+      } else {
+        return null;
+      }
+
+      // Do not include graph name if path already has it
+      if (basePath.includes(`/${graphName}/`)) {
+        return basePath;
+      }
+      
+      // Include graph name in the path
+      return `${graphName}/${basePath}`;
+    } catch (error) {
+      console.error('Error generating page file path:', error);
+      return null;
+    }
   }
 
   private async pushToRemote(
@@ -175,14 +234,21 @@ export class SyncService {
       const encoder = new TextEncoder();
       const fileContent = encoder.encode(content);
 
+      // Check if this is a journal page
+      const isJournal = pageName.match(/^\d{4}-\d{2}-\d{2}/);
+      const fileType = isJournal ? 'journal' : 'page';
+      
+      // Consistent filename derivation
+      const fileName = filePath.split('/').pop() || '';
+      
       const metadata: BackupMetadata = {
         timestamp: new Date().toISOString(),
         version: '1.0',
         graphName: await this.getGraphName(),
         pageName: pageName,
-        fileType: pageName.match(/^\d{4}-\d{2}-\d{2}/) ? 'journal' : 'page',
+        fileType: fileType,
         filePath: filePath,
-        fileName: filePath.split('/').pop() || '',
+        fileName: fileName,
         size: fileContent.byteLength
       };
 
@@ -201,16 +267,52 @@ export class SyncService {
     try {
       console.info(`Pulling page "${pageName}" from ${provider.name}`);
 
+      // Get all backups from the provider
       const backups = await provider.listBackups();
-      const pageBackups = backups.filter(b => b.pageName === pageName || b.filePath === filePath)
-        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      
+      // Handle journal pages differently
+      const isJournal = pageName.match(/^\d{4}-\d{2}-\d{2}/);
+      
+      // Create multiple possible formats for searching
+      let possibleFilePaths = [filePath];
+      
+      if (isJournal) {
+        // Convert page name to expected file name format
+        // e.g. "2022-11-06 sunday" -> "2022_11_06.md"
+        const datePart = pageName.substring(0, 10).replace(/-/g, '_');
+        const journalFileName = `${datePart}.md`;
+        
+        // Add possible file paths with different directory structures
+        const graph = await logseq.App.getCurrentGraph();
+        const graphName = graph?.name || 'default';
+        
+        possibleFilePaths = [
+          filePath,
+          `journals/${journalFileName}`,
+          `${graphName}/journals/${journalFileName}`
+        ];
+        
+        console.debug(`Journal page: ${pageName}, looking for possible paths:`, possibleFilePaths);
+      }
+      
+      // Enhanced filtering to find the right backup
+      const pageBackups = backups.filter(b => {
+        // Check page name
+        if (b.pageName === pageName) return true;
+        
+        // Check any of the possible file paths
+        return possibleFilePaths.some(path => 
+          b.filePath === path || b.filePath.endsWith(path)
+        );
+      }).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
       if (pageBackups.length === 0) {
-        console.warn(`No backups found for page "${pageName}"`);
+        console.warn(`No backups found for page "${pageName}" with any of these paths:`, possibleFilePaths);
         return false;
       }
 
       const latestBackup = pageBackups[0];
+      console.info(`Found backup for "${pageName}" from ${new Date(latestBackup.timestamp).toLocaleString()}`);
 
       const fileContent = await provider.restoreBackup(latestBackup.timestamp);
       if (!fileContent) {

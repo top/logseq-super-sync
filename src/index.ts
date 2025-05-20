@@ -18,9 +18,7 @@ async function main() {
 
     setupEventHandlers(backupService);
 
-    if (settings.backupTrigger === "automatic") {
-      await syncService.performInitialSync();
-    }
+    // await syncService.performInitialSync();
 
     const plugin = new SuperSyncPlugin(backupService, syncService);
     await plugin.initialize();

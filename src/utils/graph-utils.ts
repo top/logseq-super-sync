@@ -38,83 +38,17 @@ export async function createPageBackup(pageName: string): Promise<{ data: Uint8A
     if (page.journalDay) {
       // Journal pages are stored in journals/ with format YYYY_MM_DD.md
 
-      // First approach: Try to extract date from page name (most reliable)
-      // Journal page names are typically in format like "May 17th, 2025"
-      if (page.name) {
-        try {
-          // Parse the page name to extract date parts
-          const dateParts = page.name.match(/(\w+)\s+(\d+)(?:st|nd|rd|th)?,\s+(\d{4})/i);
-          if (dateParts) {
-            const [, monthName, dayStr, yearStr] = dateParts;
-
-            // Convert month name to number
-            const months = {
-              'january': '01', 'february': '02', 'march': '03', 'april': '04',
-              'may': '05', 'june': '06', 'july': '07', 'august': '08',
-              'september': '09', 'october': '10', 'november': '11', 'december': '12'
-            };
-
-            const monthNum = months[monthName.toLowerCase()] || '01';
-            const day = dayStr.padStart(2, '0');
-
-            fileName = `${yearStr}_${monthNum}_${day}.md`;
-            console.debug(`Extracted date from page name: ${fileName}`);
-          }
-        } catch (e) {
-          console.warn('Error parsing journal page name:', e);
-        }
-      }
-
-      // Second approach: Try using originalName if available
-      if (!fileName && page.originalName) {
-        // Some Logseq installations use originalName in YYYY_MM_DD format
-        if (/^\d{4}_\d{2}_\d{2}$/.test(page.originalName)) {
-          fileName = `${page.originalName}.md`;
-          console.debug(`Using originalName for journal: ${fileName}`);
-        }
-      }
-
-      // Third approach: Try using journalDay as direct date format YYYYMMDD
-      if (!fileName && typeof page.journalDay === 'number') {
-        // Try interpreting as YYYYMMDD directly
-        try {
-          const journalDayStr = String(page.journalDay);
-          if (journalDayStr.length >= 8) {
-            // Extract year, month, day
-            const year = journalDayStr.substring(0, 4);
-            const month = journalDayStr.substring(4, 6);
-            const day = journalDayStr.substring(6, 8);
-
-            fileName = `${year}_${month}_${day}.md`;
-            console.debug(`Parsed journalDay as direct format: ${fileName}`);
-          }
-        } catch (e) {
-          console.warn('Error parsing journalDay as direct format:', e);
-        }
-      }
-
-      // Fourth approach: If all else fails, use current date (better than 1970)
-      if (!fileName) {
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = String(now.getMonth() + 1).padStart(2, '0');
-        const day = String(now.getDate()).padStart(2, '0');
-
-        fileName = `${year}_${month}_${day}-fallback.md`;
-        console.warn(`Using fallback date for journal: ${fileName}`);
-      }
-
+      // For journal pages, extract date directly from journalDay
+      const journalDayStr = String(page.journalDay);
+      const year = journalDayStr.substring(0, 4);
+      const month = journalDayStr.substring(4, 6);
+      const day = journalDayStr.substring(6, 8);
+      fileName = `${year}_${month}_${day}.md`;
       filePath = `journals/${fileName}`;
     } else {
       // Regular pages are stored in pages/ with file-safe versions of their names
       // For simplicity, we'll use the page.name which should be close to the file name
-      fileName = `${page.name}.md`;
-
-      // Convert to filename-safe format (replacing spaces with underscores, etc.)
-      fileName = fileName.replace(/ /g, '_')
-        .replace(/[^\w\d_.-]/g, '')
-        .toLowerCase();
-
+      fileName = `${page.name.replace(/ /g, '_').replace(/[^\w\d_.-]/g, '').toLowerCase()}.md`;
       filePath = `pages/${fileName}`;
       console.debug(`Regular page detected: ${fileName}`);
     }
@@ -186,9 +120,10 @@ export async function createPageBackup(pageName: string): Promise<{ data: Uint8A
       version: '1.0',
       graphName: graphInfo.name,
       pageName: pageName,
-      fileType: page.journalDay ? 'journal' : 'page',
+      fileType: page['journal?'] ? 'journal' : 'page',
       filePath: filePath,
       fileName: fileName,
+      journalDay: page.journalDay || undefined,
       size: 0 // Will be updated after compression
     };
 

@@ -310,16 +310,16 @@ export class BackupService {
           if (pageBackupSuccessful) {
             successCount++;
 
-            // Process assets in this page
-            const assetsInPage = await findAssetsInPage(page.name);
+            // Check if page has a file object (which might indicate assets)
+            if (page.file && page.file.id) {
+              // This page likely contains assets, prioritize searching them
+              const assetsInPage = await findAssetsInPage(page.name);
 
-            // Backup each unique asset
-            for (const assetPath of assetsInPage) {
-              if (!processedAssets.has(assetPath)) {
-                processedAssets.add(assetPath);
-                const assetResult = await this.backupAsset(assetPath);
-                if (!assetResult) {
-                  errorCount++;
+              // Backup each unique asset
+              for (const assetPath of assetsInPage) {
+                if (!processedAssets.has(assetPath)) {
+                  processedAssets.add(assetPath);
+                  await this.backupAsset(assetPath);
                 }
               }
             }

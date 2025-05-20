@@ -54,7 +54,12 @@ export class S3BackupProvider extends BaseBackupProvider {
 
     // If file path info is available, use it to match exact directory structure
     if (metadata.filePath) {
-      return `${prefix}${metadata.graphName}/${metadata.filePath}`;
+      // Avoid duplicating graph name
+      if (metadata.filePath.startsWith(metadata.graphName + '/')) {
+        return `${prefix}${metadata.filePath}`;
+      } else {
+        return `${prefix}${metadata.graphName}/${metadata.filePath}`;
+      }
     }
 
     // For older backups or if filePath is unavailable

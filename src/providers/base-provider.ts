@@ -97,27 +97,53 @@ export abstract class BaseBackupProvider implements BackupProvider {
   }
 
   /**
-   * Compare local and remote files to determine which is newer
+   * Compare local and remote versions using cached backups when available
    */
-  async diffWithRemote(filePath: string, localTimestamp: Date): Promise<'local-newer' | 'remote-newer' | 'same' | 'remote-missing'> {
+  async diffWithRemote(filePath: string, localUpdatedAt: Date): Promise<'local-newer' | 'remote-newer' | 'same' | 'remote-missing'> {
     try {
-      const remoteTimestamp = await this.getFileLastModified(filePath);
+      // Get metadata for this specific file
+      const remoteMetadata = await this.getRemoteMetadataFromCache(filePath);
       
-      if (!remoteTimestamp) {
+      if (!remoteMetadata) {
         return 'remote-missing';
       }
       
-      if (localTimestamp > remoteTimestamp) {
-        return 'local-newer';
-      } else if (localTimestamp < remoteTimestamp) {
-        return 'remote-newer';
-      } else {
+      // Parse the remote timestamp
+      const remoteTimestamp = new Date(remoteMetadata.timestamp);
+      
+      // Compare timestamps (with small tolerance)
+      const timeDifference = Math.abs(remoteTimestamp.getTime() - localUpdatedAt.getTime());
+      if (timeDifference < 5000) {
         return 'same';
       }
+      
+      return localUpdatedAt > remoteTimestamp ? 'local-newer' : 'remote-newer';
     } catch (error) {
-      console.error(`Error comparing with remote in ${this.name}:`, error);
-      return 'remote-missing'; // Conservative handling on failure
+      console.error(`Error comparing with remote for ${filePath}:`, error);
+      return 'local-newer'; // Default to local-newer on error
     }
+  }
+
+  /**
+   * Get metadata from cache if available, otherwise fetch from remote
+   */
+  protected async getRemoteMetadataFromCache(filePath: string): Promise<BackupMetadata | null> {
+    // Use cached backups if available
+    const backups = (this as any)._cachedBackups || await this.listBackups();
+    
+    // Find backups that match this file path
+    const matchingBackups = backups.filter(backup => 
+      backup.filePath === filePath || backup.filePath.endsWith(filePath)
+    );
+    
+    if (matchingBackups.length === 0) return null;
+    
+    // Sort by timestamp and return latest
+    matchingBackups.sort((a, b) => 
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+    
+    return matchingBackups[0];
   }
 
   // Provider-specific methods that need implementation
