@@ -9,7 +9,7 @@ const projectPackageJson = JSON.parse(fs.readFileSync('./package.json', 'utf-8')
 const packageJson = {
   name: "logseq-super-sync",
   version: projectPackageJson.version,
-  main: "dist/index.html",
+  main: "index.html",
   logseq: {
     id: "logseq-super-sync",
     title: "Logseq Super Sync",
@@ -26,15 +26,17 @@ export default defineConfig({
     lib: {
       entry: resolve(__dirname, 'src/index.ts'),
       formats: ['iife'],
-      name: 'LogseqSuperSync',
+      name: 'LSPlugin',
       fileName: () => 'index.js',
     },
     rollupOptions: {
-      external: ['@logseq/libs'],
       output: {
         globals: {
           '@logseq/libs': 'logseq',
         },
+        inlineDynamicImports: true,
+        extend: true,
+        esModule: false
       },
     },
   },
@@ -42,21 +44,19 @@ export default defineConfig({
     {
       name: 'generate-assets',
       writeBundle: async () => {
-        // Write package.json
         fs.writeFileSync(
           resolve(__dirname, 'dist/package.json'),
           JSON.stringify(packageJson, null, 2)
         );
 
-        // Copy icon.png file from project directory to dist
-        if (fs.existsSync('./icon.png')) {
-          fs.copyFileSync(
-            './icon.png',
-            resolve(__dirname, 'dist/icon.png')
-          );
-        } else {
-          console.warn('Warning: icon.png not found in project directory');
-        }
+        ['index.html', 'README.md', 'icon.png'].forEach(file => {
+          if (fs.existsSync(`./${file}`)) {
+            fs.copyFileSync(
+              `./${file}`,
+              resolve(__dirname, `dist/${file}`)
+            );
+          }
+        });
       },
     },
   ],
