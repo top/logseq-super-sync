@@ -11,13 +11,13 @@ A Logseq plugin for automatic page backup and synchronization with cloud storage
 
 ## Features
 
-- [x] **S3 Cloud Backup**
+- [ ] **S3 Cloud Backup**
   - Automatically backup to AWS S3 or any S3-compatible service (MinIO, DigitalOcean Spaces, etc.)
-  - Intelligent file diff detection to avoid redundant uploads
+  - [ ] Intelligent file diff detection to avoid redundant uploads
   - Maintains original file structure (journals/pages directory hierarchy)
 
 - [x] **Automatic Sync Options**
-  - Real-time backup after changes (with intelligent debouncing)
+  - Real-time backup after changes (with debouncing)
   - One-click manual backup through toolbar button
   - Slash command support (`/Backup All Pages`)
 

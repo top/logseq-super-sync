@@ -5,8 +5,7 @@ let debounceData = {
   timer: null as NodeJS.Timeout | null,
   changeBuffer: [] as Array<{ blocks: any[], txData: any, txMeta: any }>,
   isProcessing: false,
-  lastEditTimestamp: 0, 
-  processScheduledTimestamp: 0 
+  lastEditTimestamp: 0
 };
 
 /**
@@ -24,7 +23,6 @@ export function setupEventHandlers(backupService: BackupService): void {
   debounceData.changeBuffer = [];
   debounceData.isProcessing = false;
   debounceData.lastEditTimestamp = 0;
-  debounceData.processScheduledTimestamp = 0;
 
   // Monitor page content changes with true strict debouncing
   logseq.DB.onChanged(async ({ blocks, txData, txMeta }) => {
@@ -32,16 +30,11 @@ export function setupEventHandlers(backupService: BackupService): void {
       // Add change to buffer
       debounceData.changeBuffer.push({ blocks, txData, txMeta });
 
-      // Update last edit timestamp
+      // Update last edit timestamp - ALWAYS DO THIS
       debounceData.lastEditTimestamp = Date.now();
 
-      // If already processing, don't interfere with the process
-      if (debounceData.isProcessing) {
-        return;
-      }
-
-      // Every edit action completely resets the timer
-      trueStrictDebounce(backupService);
+      // IMPORTANT: Always reset timer on ANY edit - regardless of processing state
+      resetDebounceTimer(backupService);
 
     } catch (error) {
       console.error('Error handling change event:', error);
@@ -49,7 +42,7 @@ export function setupEventHandlers(backupService: BackupService): void {
   });
 
   // Add a cleanup mechanism when plugin is disabled
-  logseq.beforeunload(() => {
+  logseq.beforeunload(async () => {
     if (debounceData.timer) {
       clearTimeout(debounceData.timer);
       debounceData.timer = null;
@@ -57,18 +50,18 @@ export function setupEventHandlers(backupService: BackupService): void {
 
     // Process any pending changes before unloading if buffer isn't empty
     if (debounceData.changeBuffer.length > 0 && !debounceData.isProcessing) {
-      backupService.processChanges(debounceData.changeBuffer)
+      await backupService.processChanges(debounceData.changeBuffer)
         .catch(err => console.error('Error in final change processing:', err));
     }
   });
 }
 
 /**
- * Implements true strict debounce - absolutely guarantees no processing 
- * until after complete inactivity period
+ * Reset the global debounce timer
+ * This is the single source of truth for timer management
  */
-function trueStrictDebounce(backupService: BackupService): void {
-  // Clear existing timer if any
+function resetDebounceTimer(backupService: BackupService): void {
+  // Clear existing timer if any - ALWAYS do this
   if (debounceData.timer) {
     clearTimeout(debounceData.timer);
     debounceData.timer = null;
@@ -77,57 +70,55 @@ function trueStrictDebounce(backupService: BackupService): void {
   // Get debounce time from settings (in seconds) and convert to milliseconds
   const debounceDelay = (backupService.settings.debounceTime || 5) * 1000;
 
-  // Record when this processing is scheduled for
-  debounceData.processScheduledTimestamp = Date.now() + debounceDelay;
-
-  // Set a new timer with safety verification
+  // Set a new timer that will only fire after complete inactivity
   debounceData.timer = setTimeout(() => {
-    // Double check if enough time has passed since last edit
-    const now = Date.now();
-    const timeSinceLastEdit = now - debounceData.lastEditTimestamp;
+    // When timer fires, check if there's been any activity since it was scheduled
+    const inactivityTime = Date.now() - debounceData.lastEditTimestamp;
 
-    if (timeSinceLastEdit < debounceDelay) {
-      // Safety check - reschedule if edits happened but didn't reset timer
-      console.log(`Safety check: only ${timeSinceLastEdit}ms since last edit, rescheduling`);
-      trueStrictDebounce(backupService);
-      return;
+    if (inactivityTime < debounceDelay) {
+      console.log(`Timer fired too early: only ${inactivityTime}ms of inactivity, needs ${debounceDelay}ms`);
+      // If there was activity, reset the timer again
+      resetDebounceTimer(backupService);
+    } else {
+      // If there was complete inactivity for the full period, process changes
+      console.log(`Processing after ${inactivityTime}ms of complete inactivity`);
+      processChangesIfNeeded(backupService);
     }
-
-    // Process the changes
-    processDebounceChanges(backupService);
   }, debounceDelay);
 }
 
 /**
- * Process the changes after debounce period
+ * Process changes if there are any in the buffer
  */
-async function processDebounceChanges(backupService: BackupService): Promise<void> {
+async function processChangesIfNeeded(backupService: BackupService): Promise<void> {
+  // Only process if we have changes and aren't already processing
+  if (debounceData.changeBuffer.length === 0 || debounceData.isProcessing) {
+    return;
+  }
+
   try {
-    // Mark as processing to prevent interference
+    // Mark as processing
     debounceData.isProcessing = true;
 
-    // Get debounce time from settings for logging
-    const debounceDelay = backupService.settings.debounceTime || 5;
-    console.info(`Processing changes after ${debounceDelay}s of complete inactivity`);
-
-    // Make a local copy of changes and clear the global buffer
+    // Make a local copy of changes and clear the buffer
     const changesSnapshot = [...debounceData.changeBuffer];
     debounceData.changeBuffer = [];
 
-    // Process the changes
-    await backupService.processChanges(changesSnapshot);
+    // Process changes
+    const debounceDelay = backupService.settings.debounceTime || 5;
+    console.info(`Processing ${changesSnapshot.length} changes after ${debounceDelay}s of complete inactivity`);
 
-  } catch (err) {
-    console.error('Error in debounced change processing:', err);
+    await backupService.processChanges(changesSnapshot);
+  } catch (error) {
+    console.error('Error processing changes:', error);
   } finally {
-    // Reset state when done
-    debounceData.timer = null;
+    // Reset processing flag
     debounceData.isProcessing = false;
 
-    // If new changes accumulated during processing, restart timer
+    // Check if new changes came in during processing
     if (debounceData.changeBuffer.length > 0) {
-      debounceData.lastEditTimestamp = Date.now();
-      trueStrictDebounce(backupService);
+      // If so, start a new timer
+      resetDebounceTimer(backupService);
     }
   }
 }
