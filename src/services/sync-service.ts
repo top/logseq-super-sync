@@ -88,11 +88,11 @@ export class SyncService {
     try {
       // Get list of pages to sync
       const pages = await logseq.Editor.getAllPages() || [];
-      
+
       // For each provider, get the full backup list ONCE
       for (const [providerName, provider] of this.providers.entries()) {
         if (!this.isProviderEnabled(providerName)) continue;
-        
+
         // Get all backups for this provider
         const backups = await provider.listBackups();
         (provider as any)._cachedBackups = backups;
@@ -127,7 +127,7 @@ export class SyncService {
         return;
       }
 
-      const localUpdatedAt = new Date(page.updatedAt);
+      const localUpdatedAt = new Date(page.updatedAt || Date.now());
 
       for (const [providerName, provider] of this.providers.entries()) {
         if (!this.isProviderEnabled(providerName)) {
@@ -197,7 +197,7 @@ export class SyncService {
         if (page.file.path.includes(`/${graphName}/`)) {
           return page.file.path;
         }
-        
+
         // Otherwise construct proper path
         return `${graphName}/${page.file.path}`;
       }
@@ -213,7 +213,7 @@ export class SyncService {
       if (basePath.includes(`/${graphName}/`)) {
         return basePath;
       }
-      
+
       // Include graph name in the path
       return `${graphName}/${basePath}`;
     } catch (error) {
@@ -237,10 +237,10 @@ export class SyncService {
       // Check if this is a journal page
       const isJournal = pageName.match(/^\d{4}-\d{2}-\d{2}/);
       const fileType = isJournal ? 'journal' : 'page';
-      
+
       // Consistent filename derivation
       const fileName = filePath.split('/').pop() || '';
-      
+
       const metadata: BackupMetadata = {
         timestamp: new Date().toISOString(),
         version: '1.0',
@@ -269,40 +269,40 @@ export class SyncService {
 
       // Get all backups from the provider
       const backups = await provider.listBackups();
-      
+
       // Handle journal pages differently
       const isJournal = pageName.match(/^\d{4}-\d{2}-\d{2}/);
-      
+
       // Create multiple possible formats for searching
       let possibleFilePaths = [filePath];
-      
+
       if (isJournal) {
         // Convert page name to expected file name format
         // e.g. "2022-11-06 sunday" -> "2022_11_06.md"
         const datePart = pageName.substring(0, 10).replace(/-/g, '_');
         const journalFileName = `${datePart}.md`;
-        
+
         // Add possible file paths with different directory structures
         const graph = await logseq.App.getCurrentGraph();
         const graphName = graph?.name || 'default';
-        
+
         possibleFilePaths = [
           filePath,
           `journals/${journalFileName}`,
           `${graphName}/journals/${journalFileName}`
         ];
-        
+
         console.debug(`Journal page: ${pageName}, looking for possible paths:`, possibleFilePaths);
       }
-      
+
       // Enhanced filtering to find the right backup
       const pageBackups = backups.filter(b => {
         // Check page name
         if (b.pageName === pageName) return true;
-        
+
         // Check any of the possible file paths
-        return possibleFilePaths.some(path => 
-          b.filePath === path || b.filePath.endsWith(path)
+        return possibleFilePaths.some(path =>
+          b.filePath ? (b.filePath === path || b.filePath.endsWith(path)) : false
         );
       }).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 

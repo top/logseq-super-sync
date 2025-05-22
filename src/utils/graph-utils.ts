@@ -123,7 +123,7 @@ export async function createPageBackup(pageName: string): Promise<{ data: Uint8A
       fileType: page['journal?'] ? 'journal' : 'page',
       filePath: filePath,
       fileName: fileName,
-      journalDay: page.journalDay || undefined,
+      journalDay: page.journalDay?.toString() || undefined,
       size: 0 // Will be updated after compression
     };
 

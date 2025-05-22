@@ -38,7 +38,7 @@ export class S3BackupProvider extends BaseBackupProvider {
 
       this.s3Client = new S3Client(clientConfig);
       console.info(`S3 provider initialized with ${this.settings.s3_customEndpoint ? 'custom endpoint' : 'AWS S3'}`);
-      
+
       return true;
     } catch (error) {
       console.error('Failed to initialize S3 provider:', error);
@@ -131,14 +131,8 @@ export class S3BackupProvider extends BaseBackupProvider {
 
       // Convert stream to Uint8Array
       let chunks: Uint8Array[] = [];
-      const reader = Body.getReader();
-      let done, value;
-
-      while (!done) {
-        ({ done, value } = await reader.read());
-        if (value) {
-          chunks.push(value);
-        }
+      for await (const chunk of Body as any) {
+        chunks.push(chunk);
       }
 
       // Concatenate chunks
@@ -269,7 +263,7 @@ export class S3BackupProvider extends BaseBackupProvider {
         Bucket: this.settings.s3_bucketName,
         Key: key
       });
-      
+
       const response = await this.s3Client.send(headCommand);
       return response.LastModified || null;
     } catch (error) {

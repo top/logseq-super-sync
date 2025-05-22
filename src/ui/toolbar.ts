@@ -21,7 +21,8 @@ export function setupToolbar(settings: Settings, backupService?: BackupService) 
         logseq.provideUI({
           key: 'backupAllPages',
           slot: '',
-          reset: true
+          reset: true,
+          template: '<div>Backup in progress...</div>'
         });
       }
     }
@@ -48,7 +49,12 @@ export function setupToolbar(settings: Settings, backupService?: BackupService) 
           await backupService.backupAllPages();
         } else {
           // Fallback to model
-          await logseq.callApp('backupAllPages');
+          logseq.provideUI({
+            key: 'backupAllPages',
+            slot: '',
+            reset: true,
+            template: '<div>Backup in progress...</div>'
+          });
         }
       } catch (error) {
         console.error('Error during backup:', error);

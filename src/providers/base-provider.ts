@@ -30,7 +30,7 @@ export abstract class BaseBackupProvider implements BackupProvider {
     if (!this.initialized) {
       throw new Error(`${this.name} provider not initialized`);
     }
-    
+
     try {
       const key = this.generateBackupKey(metadata);
       return await this.uploadFile(key, data, metadata);
@@ -47,7 +47,7 @@ export abstract class BaseBackupProvider implements BackupProvider {
     if (!this.initialized) {
       throw new Error(`${this.name} provider not initialized`);
     }
-    
+
     try {
       return await this.listFiles();
     } catch (error) {
@@ -63,7 +63,7 @@ export abstract class BaseBackupProvider implements BackupProvider {
     if (!this.initialized) {
       throw new Error(`${this.name} provider not initialized`);
     }
-    
+
     try {
       const key = await this.findFileByTimestamp(timestamp);
       if (!key) {
@@ -83,7 +83,7 @@ export abstract class BaseBackupProvider implements BackupProvider {
     if (!this.initialized) {
       throw new Error(`${this.name} provider not initialized`);
     }
-    
+
     try {
       const key = await this.findFileByTimestamp(timestamp);
       if (!key) {
@@ -103,20 +103,20 @@ export abstract class BaseBackupProvider implements BackupProvider {
     try {
       // Get metadata for this specific file
       const remoteMetadata = await this.getRemoteMetadataFromCache(filePath);
-      
+
       if (!remoteMetadata) {
         return 'remote-missing';
       }
-      
+
       // Parse the remote timestamp
       const remoteTimestamp = new Date(remoteMetadata.timestamp);
-      
+
       // Compare timestamps (with small tolerance)
       const timeDifference = Math.abs(remoteTimestamp.getTime() - localUpdatedAt.getTime());
       if (timeDifference < 5000) {
         return 'same';
       }
-      
+
       return localUpdatedAt > remoteTimestamp ? 'local-newer' : 'remote-newer';
     } catch (error) {
       console.error(`Error comparing with remote for ${filePath}:`, error);
@@ -130,19 +130,19 @@ export abstract class BaseBackupProvider implements BackupProvider {
   protected async getRemoteMetadataFromCache(filePath: string): Promise<BackupMetadata | null> {
     // Use cached backups if available
     const backups = (this as any)._cachedBackups || await this.listBackups();
-    
+
     // Find backups that match this file path
-    const matchingBackups = backups.filter(backup => 
-      backup.filePath === filePath || backup.filePath.endsWith(filePath)
+    const matchingBackups = backups.filter((backup: BackupMetadata) =>
+      backup.filePath && (backup.filePath === filePath || backup.filePath.endsWith(filePath))
     );
-    
+
     if (matchingBackups.length === 0) return null;
-    
+
     // Sort by timestamp and return latest
-    matchingBackups.sort((a, b) => 
+    matchingBackups.sort((a: BackupMetadata, b: BackupMetadata) =>
       new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     );
-    
+
     return matchingBackups[0];
   }
 

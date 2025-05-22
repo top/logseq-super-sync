@@ -27,6 +27,8 @@ export interface BackupMetadata {
 
   /** Size in bytes */
   size: number;
+
+  journalDay?: string; // Optional, only for journal files
 }
 
 /**

@@ -7,8 +7,7 @@ export const settingsSchema: SettingSchemaDesc[] = [
     type: "heading",
     title: "Super Sync",
     description: "Automatic backup and sync for your Logseq graph to cloud storage",
-    default: null,
-    icon: "ti ti-cloud-upload"
+    default: null
   },
   {
     key: "debounceTime",
@@ -50,7 +49,6 @@ export const settingsSchema: SettingSchemaDesc[] = [
     type: "string",
     title: "S3 Secret Access Key",
     description: "Your AWS secret access key",
-    inputAs: "password",
     default: "",
   },
   {

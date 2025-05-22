@@ -7,14 +7,10 @@ const projectPackageJson = JSON.parse(fs.readFileSync('./package.json', 'utf-8')
 
 // Plugin metadata
 const packageJson = {
-  name: "logseq-super-sync",
+  name: projectPackageJson.name,
   version: projectPackageJson.version,
-  main: "index.html",
-  logseq: {
-    id: "logseq-super-sync",
-    title: "Logseq Super Sync",
-    icon: "icon.png"
-  }
+  main: projectPackageJson.main,
+  logseq: projectPackageJson.logseq,
 };
 
 export default defineConfig({

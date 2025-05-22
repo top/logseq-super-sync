@@ -34,6 +34,10 @@ export class BackupService {
     }
   }
 
+  getDebounceTime(): number {
+    return this.settings.debounceTime;
+  }
+
   /**
    * Updates settings
    * @param newSettings New settings to apply
@@ -228,7 +232,7 @@ export class BackupService {
       }
     } catch (error) {
       console.error(`Error creating backup for page ${pageName}:`, error);
-      logseq.UI.showMsg(`Backup failed: ${error.message}`, 'error');
+      logseq.UI.showMsg(`Backup failed: ${error instanceof Error ? error.message : String(error)}`, 'error');
     }
   }
 
@@ -340,7 +344,7 @@ export class BackupService {
       logseq.UI.showMsg(summaryMessage, errorCount > 0 ? 'warning' : 'success');
     } catch (error) {
       console.error('Error during backupAllPages:', error);
-      logseq.UI.showMsg(`Error during backup: ${error.message}`, 'error');
+      logseq.UI.showMsg(`Error during backup: ${error instanceof Error ? error.message : String(error)}`, 'error');
     }
   }
 

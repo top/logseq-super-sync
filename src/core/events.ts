@@ -1,11 +1,11 @@
 import { BackupService } from '../services/backup-service';
 
-// Global debounce control with timestamp tracking
-let debounceData = {
-  timer: null as NodeJS.Timeout | null,
+// Enhanced state tracking - added lastChangeTimestamp
+let syncState = {
   changeBuffer: [] as Array<{ blocks: any[], txData: any, txMeta: any }>,
-  isProcessing: false,
-  lastEditTimestamp: 0
+  isChanged: false,
+  intervalTimer: null as NodeJS.Timeout | null,
+  lastChangeTimestamp: 0  // Track when the last change occurred
 };
 
 /**
@@ -14,111 +14,73 @@ let debounceData = {
  */
 export function setupEventHandlers(backupService: BackupService): void {
   // Clean up any existing timer on setup
-  if (debounceData.timer) {
-    clearTimeout(debounceData.timer);
-    debounceData.timer = null;
+  if (syncState.intervalTimer) {
+    clearInterval(syncState.intervalTimer);
+    syncState.intervalTimer = null;
   }
 
-  // Reset global state
-  debounceData.changeBuffer = [];
-  debounceData.isProcessing = false;
-  debounceData.lastEditTimestamp = 0;
+  // Reset state
+  syncState.changeBuffer = [];
+  syncState.isChanged = false;
+  syncState.lastChangeTimestamp = 0;
 
-  // Monitor page content changes with true strict debouncing
+  // Monitor page content changes - collect changes, mark as changed, and update timestamp
   logseq.DB.onChanged(async ({ blocks, txData, txMeta }) => {
-    try {
-      // Add change to buffer
-      debounceData.changeBuffer.push({ blocks, txData, txMeta });
+    // Add change to buffer
+    syncState.changeBuffer.push({ blocks, txData, txMeta });
 
-      // Update last edit timestamp - ALWAYS DO THIS
-      debounceData.lastEditTimestamp = Date.now();
+    // Mark as changed - our trigger flag
+    syncState.isChanged = true;
 
-      // IMPORTANT: Always reset timer on ANY edit - regardless of processing state
-      resetDebounceTimer(backupService);
-
-    } catch (error) {
-      console.error('Error handling change event:', error);
-    }
+    // Update the last change timestamp with current time
+    syncState.lastChangeTimestamp = Date.now();
   });
 
-  // Add a cleanup mechanism when plugin is disabled
+  // Set up the timer to check for changes
+  const intervalSeconds = backupService.getDebounceTime() || 5;
+  syncState.intervalTimer = setInterval(() => {
+    const inactivitySeconds = (Date.now() - syncState.lastChangeTimestamp) / 1000;
+    const minInactivitySeconds = intervalSeconds;
+
+    // Check both conditions: changes exist AND enough inactive time has passed
+    if (syncState.isChanged && inactivitySeconds >= minInactivitySeconds) {
+      console.debug(`Processing changes after ${inactivitySeconds.toFixed(1)}s of inactivity`);
+      processChanges(backupService);
+    }
+  }, intervalSeconds * 1000);
+
+  console.info(`Sync check scheduled every ${intervalSeconds} seconds, requires ${intervalSeconds}s inactivity`);
+
+  // Cleanup on plugin disable
   logseq.beforeunload(async () => {
-    if (debounceData.timer) {
-      clearTimeout(debounceData.timer);
-      debounceData.timer = null;
+    if (syncState.intervalTimer) {
+      clearInterval(syncState.intervalTimer);
+      syncState.intervalTimer = null;
     }
 
-    // Process any pending changes before unloading if buffer isn't empty
-    if (debounceData.changeBuffer.length > 0 && !debounceData.isProcessing) {
-      await backupService.processChanges(debounceData.changeBuffer)
-        .catch(err => console.error('Error in final change processing:', err));
+    // Final sync if needed - bypass inactivity check for shutdown
+    if (syncState.isChanged) {
+      await processChanges(backupService);
     }
   });
 }
 
 /**
- * Reset the global debounce timer
- * This is the single source of truth for timer management
+ * Process changes - runs independently on timer schedule
  */
-function resetDebounceTimer(backupService: BackupService): void {
-  // Clear existing timer if any - ALWAYS do this
-  if (debounceData.timer) {
-    clearTimeout(debounceData.timer);
-    debounceData.timer = null;
-  }
-
-  // Get debounce time from settings (in seconds) and convert to milliseconds
-  const debounceDelay = (backupService.settings.debounceTime || 5) * 1000;
-
-  // Set a new timer that will only fire after complete inactivity
-  debounceData.timer = setTimeout(() => {
-    // When timer fires, check if there's been any activity since it was scheduled
-    const inactivityTime = Date.now() - debounceData.lastEditTimestamp;
-
-    if (inactivityTime < debounceDelay) {
-      console.log(`Timer fired too early: only ${inactivityTime}ms of inactivity, needs ${debounceDelay}ms`);
-      // If there was activity, reset the timer again
-      resetDebounceTimer(backupService);
-    } else {
-      // If there was complete inactivity for the full period, process changes
-      console.log(`Processing after ${inactivityTime}ms of complete inactivity`);
-      processChangesIfNeeded(backupService);
-    }
-  }, debounceDelay);
-}
-
-/**
- * Process changes if there are any in the buffer
- */
-async function processChangesIfNeeded(backupService: BackupService): Promise<void> {
-  // Only process if we have changes and aren't already processing
-  if (debounceData.changeBuffer.length === 0 || debounceData.isProcessing) {
-    return;
-  }
-
+async function processChanges(backupService: BackupService): Promise<void> {
   try {
-    // Mark as processing
-    debounceData.isProcessing = true;
+    // Immediately reset the change flag
+    syncState.isChanged = false;
 
-    // Make a local copy of changes and clear the buffer
-    const changesSnapshot = [...debounceData.changeBuffer];
-    debounceData.changeBuffer = [];
+    // Capture current changes
+    const changes = [...syncState.changeBuffer];
+    syncState.changeBuffer = [];
 
-    // Process changes
-    const debounceDelay = backupService.settings.debounceTime || 5;
-    console.info(`Processing ${changesSnapshot.length} changes after ${debounceDelay}s of complete inactivity`);
-
-    await backupService.processChanges(changesSnapshot);
+    // Process the changes
+    console.info(`Processing ${changes.length} changes`);
+    await backupService.processChanges(changes);
   } catch (error) {
     console.error('Error processing changes:', error);
-  } finally {
-    // Reset processing flag
-    debounceData.isProcessing = false;
-
-    // Check if new changes came in during processing
-    if (debounceData.changeBuffer.length > 0) {
-      // If so, start a new timer
-      resetDebounceTimer(backupService);
-    }
   }
 }
