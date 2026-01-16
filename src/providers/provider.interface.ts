@@ -32,11 +32,22 @@ export interface BackupMetadata {
 }
 
 /**
+ * Connection test result
+ */
+export interface ConnectionTestResult {
+  success: boolean;
+  message: string;
+}
+
+/**
  * Interface that all backup providers must implement
  */
 export interface BackupProvider {
-  /** Provider name */
+  /** Provider identifier */
   name: string;
+
+  /** Display name for UI */
+  displayName: string;
 
   /**
    * Initialize the provider with settings
@@ -44,6 +55,12 @@ export interface BackupProvider {
    * @returns Promise resolving to true if initialization succeeded
    */
   initialize(settings: Settings): Promise<boolean>;
+
+  /**
+   * Test connection to the storage provider
+   * @returns Promise with connection test result
+   */
+  testConnection(): Promise<ConnectionTestResult>;
 
   /**
    * Backup data to the storage provider

@@ -1,4 +1,4 @@
-import { BackupProvider, BackupMetadata } from './provider.interface';
+import { BackupProvider, BackupMetadata, ConnectionTestResult } from './provider.interface';
 import { Settings } from '../core/settings';
 
 /**
@@ -6,11 +6,13 @@ import { Settings } from '../core/settings';
  */
 export abstract class BaseBackupProvider implements BackupProvider {
   name: string;
+  displayName: string;
   protected settings: Settings;
   protected initialized: boolean = false;
 
-  constructor(name: string) {
+  constructor(name: string, displayName: string) {
     this.name = name;
+    this.displayName = displayName;
     this.settings = {} as Settings;
   }
 
@@ -24,11 +26,29 @@ export abstract class BaseBackupProvider implements BackupProvider {
   }
 
   /**
+   * Test connection to the storage provider
+   */
+  async testConnection(): Promise<ConnectionTestResult> {
+    if (!this.initialized) {
+      return { success: false, message: `${this.displayName} provider not initialized` };
+    }
+
+    try {
+      return await this.testProviderConnection();
+    } catch (error) {
+      return {
+        success: false,
+        message: `Connection test failed: ${error instanceof Error ? error.message : String(error)}`
+      };
+    }
+  }
+
+  /**
    * Backup data to storage provider
    */
   async backup(data: Uint8Array, metadata: BackupMetadata): Promise<boolean> {
     if (!this.initialized) {
-      throw new Error(`${this.name} provider not initialized`);
+      throw new Error(`${this.displayName} provider not initialized`);
     }
 
     try {
@@ -45,7 +65,7 @@ export abstract class BaseBackupProvider implements BackupProvider {
    */
   async listBackups(): Promise<BackupMetadata[]> {
     if (!this.initialized) {
-      throw new Error(`${this.name} provider not initialized`);
+      throw new Error(`${this.displayName} provider not initialized`);
     }
 
     try {
@@ -61,7 +81,7 @@ export abstract class BaseBackupProvider implements BackupProvider {
    */
   async restoreBackup(timestamp: string): Promise<Uint8Array | null> {
     if (!this.initialized) {
-      throw new Error(`${this.name} provider not initialized`);
+      throw new Error(`${this.displayName} provider not initialized`);
     }
 
     try {
@@ -81,7 +101,7 @@ export abstract class BaseBackupProvider implements BackupProvider {
    */
   async deleteBackup(timestamp: string): Promise<boolean> {
     if (!this.initialized) {
-      throw new Error(`${this.name} provider not initialized`);
+      throw new Error(`${this.displayName} provider not initialized`);
     }
 
     try {
@@ -148,6 +168,7 @@ export abstract class BaseBackupProvider implements BackupProvider {
 
   // Provider-specific methods that need implementation
   protected abstract initializeProvider(): Promise<boolean>;
+  protected abstract testProviderConnection(): Promise<ConnectionTestResult>;
   protected abstract generateBackupKey(metadata: BackupMetadata): string;
   protected abstract uploadFile(key: string, data: Uint8Array, metadata: BackupMetadata): Promise<boolean>;
   protected abstract downloadFile(key: string): Promise<Uint8Array | null>;

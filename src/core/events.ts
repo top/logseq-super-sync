@@ -1,11 +1,11 @@
+import '@logseq/libs';
 import { BackupService } from '../services/backup-service';
 
-// Enhanced state tracking - added lastChangeTimestamp
+// State tracking for debounce logic
 let syncState = {
   changeBuffer: [] as Array<{ blocks: any[], txData: any, txMeta: any }>,
   isChanged: false,
-  intervalTimer: null as NodeJS.Timeout | null,
-  lastChangeTimestamp: 0  // Track when the last change occurred
+  debounceTimer: null as ReturnType<typeof setTimeout> | null
 };
 
 /**
@@ -14,17 +14,20 @@ let syncState = {
  */
 export function setupEventHandlers(backupService: BackupService): void {
   // Clean up any existing timer on setup
-  if (syncState.intervalTimer) {
-    clearInterval(syncState.intervalTimer);
-    syncState.intervalTimer = null;
+  if (syncState.debounceTimer) {
+    clearTimeout(syncState.debounceTimer);
+    syncState.debounceTimer = null;
   }
 
   // Reset state
   syncState.changeBuffer = [];
   syncState.isChanged = false;
-  syncState.lastChangeTimestamp = 0;
 
-  // Monitor page content changes - collect changes, mark as changed, and update timestamp
+  const debounceMs = (backupService.getDebounceTime() || 5) * 1000;
+
+  console.info(`Auto-backup configured: will trigger ${debounceMs / 1000}s after editing stops`);
+
+  // Monitor page content changes - collect changes and reset debounce timer
   logseq.DB.onChanged(async ({ blocks, txData, txMeta }) => {
     // Add change to buffer
     syncState.changeBuffer.push({ blocks, txData, txMeta });
@@ -32,33 +35,28 @@ export function setupEventHandlers(backupService: BackupService): void {
     // Mark as changed - our trigger flag
     syncState.isChanged = true;
 
-    // Update the last change timestamp with current time
-    syncState.lastChangeTimestamp = Date.now();
-  });
-
-  // Set up the timer to check for changes
-  const intervalSeconds = backupService.getDebounceTime() || 5;
-  syncState.intervalTimer = setInterval(() => {
-    const inactivitySeconds = (Date.now() - syncState.lastChangeTimestamp) / 1000;
-    const minInactivitySeconds = intervalSeconds;
-
-    // Check both conditions: changes exist AND enough inactive time has passed
-    if (syncState.isChanged && inactivitySeconds >= minInactivitySeconds) {
-      console.debug(`Processing changes after ${inactivitySeconds.toFixed(1)}s of inactivity`);
-      processChanges(backupService);
+    // Clear any existing debounce timer - this is the key to proper debouncing
+    if (syncState.debounceTimer) {
+      clearTimeout(syncState.debounceTimer);
     }
-  }, intervalSeconds * 1000);
 
-  console.info(`Sync check scheduled every ${intervalSeconds} seconds, requires ${intervalSeconds}s inactivity`);
+    // Set a new timer - only fires if no more changes come in within debounceMs
+    syncState.debounceTimer = setTimeout(() => {
+      if (syncState.isChanged) {
+        console.debug(`Processing changes after ${debounceMs / 1000}s of inactivity`);
+        processChanges(backupService);
+      }
+    }, debounceMs);
+  });
 
   // Cleanup on plugin disable
   logseq.beforeunload(async () => {
-    if (syncState.intervalTimer) {
-      clearInterval(syncState.intervalTimer);
-      syncState.intervalTimer = null;
+    if (syncState.debounceTimer) {
+      clearTimeout(syncState.debounceTimer);
+      syncState.debounceTimer = null;
     }
 
-    // Final sync if needed - bypass inactivity check for shutdown
+    // Final sync if needed - bypass debounce for shutdown
     if (syncState.isChanged) {
       await processChanges(backupService);
     }
@@ -66,19 +64,22 @@ export function setupEventHandlers(backupService: BackupService): void {
 }
 
 /**
- * Process changes - runs independently on timer schedule
+ * Process changes - runs after debounce period
  */
 async function processChanges(backupService: BackupService): Promise<void> {
   try {
     // Immediately reset the change flag
     syncState.isChanged = false;
 
+    // Clear the timer reference
+    syncState.debounceTimer = null;
+
     // Capture current changes
     const changes = [...syncState.changeBuffer];
     syncState.changeBuffer = [];
 
     // Process the changes
-    console.info(`Processing ${changes.length} changes`);
+    console.info(`Processing ${changes.length} buffered changes`);
     await backupService.processChanges(changes);
   } catch (error) {
     console.error('Error processing changes:', error);

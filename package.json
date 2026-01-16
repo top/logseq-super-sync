@@ -1,7 +1,7 @@
 {
   "name": "logseq-super-sync",
-  "version": "1.0.6",
-  "description": "Auto-backup your Logseq graph to S3 and other cloud storage",
+  "version": "2.0.0",
+  "description": "Auto-backup your Logseq graph to S3, WebDAV, and other cloud storage",
   "main": "index.html",
   "scripts": {
     "dev": "vite",
@@ -11,7 +11,7 @@
   "license": "MIT",
   "logseq": {
     "title": "Super Sync",
-    "description": "Automatic backup and sync for your Logseq graph to S3 and other cloud storage.",
+    "description": "Automatic backup and sync for your Logseq graph to S3, WebDAV, and other cloud storage.",
     "author": "ie9.org",
     "repo": "top/logseq-super-sync",
     "icon": "icon.png",
@@ -27,13 +27,16 @@
     "backup",
     "sync",
     "s3",
+    "webdav",
+    "nextcloud",
     "cloud storage"
   ],
   "dependencies": {
     "@aws-sdk/client-s3": "^3.418.0",
     "@aws-sdk/lib-storage": "^3.418.0",
     "@logseq/libs": "^0.0.15",
-    "jszip": "^3.10.1"
+    "jszip": "^3.10.1",
+    "webdav": "^5.3.0"
   },
   "devDependencies": {
     "@types/node": "^22.15.21",

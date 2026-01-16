@@ -1,4 +1,4 @@
-import { BackupMetadata } from './provider.interface';
+import { BackupMetadata, ConnectionTestResult } from './provider.interface';
 import { BaseBackupProvider } from './base-provider';
 import {
   S3Client,
@@ -6,7 +6,8 @@ import {
   ListObjectsV2Command,
   GetObjectCommand,
   DeleteObjectCommand,
-  HeadObjectCommand
+  HeadObjectCommand,
+  HeadBucketCommand
 } from '@aws-sdk/client-s3';
 
 /**
@@ -16,7 +17,7 @@ export class S3BackupProvider extends BaseBackupProvider {
   private s3Client: S3Client;
 
   constructor() {
-    super('s3');
+    super('s3', 'Amazon S3');
     this.s3Client = {} as S3Client;
   }
 
@@ -43,6 +44,21 @@ export class S3BackupProvider extends BaseBackupProvider {
     } catch (error) {
       console.error('Failed to initialize S3 provider:', error);
       return false;
+    }
+  }
+
+  protected async testProviderConnection(): Promise<ConnectionTestResult> {
+    try {
+      const command = new HeadBucketCommand({
+        Bucket: this.settings.s3_bucketName
+      });
+      await this.s3Client.send(command);
+      return { success: true, message: `Successfully connected to bucket: ${this.settings.s3_bucketName}` };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Failed to connect: ${error instanceof Error ? error.message : String(error)}`
+      };
     }
   }
 

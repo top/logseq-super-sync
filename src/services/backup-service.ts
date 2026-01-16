@@ -1,5 +1,5 @@
-import { Settings, getEnabledProviders } from '../core/settings';
-import { createPageBackup, findAssetsInPage, detectTagPage } from '../utils/graph-utils';
+import { Settings, getEnabledProviders, shouldBackupPage } from '../core/settings';
+import { createPageBackup, findAssetsInPage, detectTagPage, getPageTags } from '../utils/graph-utils';
 import { ProviderRegistry } from '../providers/provider-registry';
 
 const processedAssets = new Set<string>();
@@ -20,18 +20,41 @@ export class BackupService {
   }
 
   /**
+   * Show notification if enabled in settings
+   */
+  private showNotification(message: string, type: 'info' | 'success' | 'warning' | 'error'): void {
+    if (this.settings.showNotifications) {
+      logseq.UI.showMsg(message, type);
+    }
+  }
+
+  /**
    * Initializes the backup service with settings
    */
   async initialize(): Promise<void> {
     const enabledProviderNames = getEnabledProviders(this.settings);
 
+    console.info(`[SuperSync] Initializing with ${enabledProviderNames.length} enabled providers:`, enabledProviderNames);
+    console.debug('[SuperSync] Settings:', {
+      s3_enabled: this.settings.s3_enabled,
+      s3_bucket: this.settings.s3_bucketName ? '(set)' : '(empty)',
+      webdav_enabled: this.settings.webdav_enabled,
+      local_enabled: this.settings.local_enabled,
+    });
+
+    if (enabledProviderNames.length === 0) {
+      console.warn('[SuperSync] No providers enabled! Check settings.');
+    }
+
     for (const providerName of enabledProviderNames) {
       try {
         await this.initializeProvider(providerName);
       } catch (error) {
-        console.error(`Failed to initialize ${providerName} provider:`, error);
+        console.error(`[SuperSync] Failed to initialize ${providerName} provider:`, error);
       }
     }
+
+    console.info(`[SuperSync] Initialized providers:`, Object.keys(this.providers));
   }
 
   getDebounceTime(): number {
@@ -39,7 +62,7 @@ export class BackupService {
   }
 
   /**
-   * Updates settings
+   * Updates settings and manages provider lifecycle
    * @param newSettings New settings to apply
    */
   async updateSettings(newSettings: Settings): Promise<void> {
@@ -51,18 +74,22 @@ export class BackupService {
     // Check which providers are enabled after settings change
     const currentProviders = getEnabledProviders(this.settings);
 
-    // If providers changed, reinitialize them
-    if (JSON.stringify(previousProviders) !== JSON.stringify(currentProviders)) {
-      console.info('Providers changed, reinitializing...');
+    // Remove disabled providers
+    for (const providerName of previousProviders) {
+      if (!currentProviders.includes(providerName)) {
+        console.info(`Removing disabled provider: ${providerName}`);
+        delete this.providers[providerName];
+      }
+    }
 
-      // Initialize new providers
-      for (const providerName of currentProviders) {
-        if (!previousProviders.includes(providerName)) {
-          try {
-            await this.initializeProvider(providerName);
-          } catch (error) {
-            console.error(`Failed to initialize ${providerName} provider:`, error);
-          }
+    // Initialize new providers
+    for (const providerName of currentProviders) {
+      if (!previousProviders.includes(providerName)) {
+        try {
+          console.info(`Initializing new provider: ${providerName}`);
+          await this.initializeProvider(providerName);
+        } catch (error) {
+          console.error(`Failed to initialize ${providerName} provider:`, error);
         }
       }
     }
@@ -242,27 +269,33 @@ export class BackupService {
   async backupAllPages(): Promise<void> {
     try {
       // Show progress notification
-      logseq.UI.showMsg('Starting full vault backup...', 'info');
+      const modeText = this.settings.backupMode === 'tagged'
+        ? `tagged pages (tags: ${this.settings.backupTags || 'none specified'})`
+        : 'all pages';
+      this.showNotification(`Starting backup of ${modeText}...`, 'info');
 
       // Get all pages
       const allPages = await logseq.Editor.getAllPages();
       if (!allPages || allPages.length === 0) {
-        logseq.UI.showMsg('No pages found in the current graph', 'warning');
+        this.showNotification('No pages found in the current graph', 'warning');
         return;
       }
 
-      console.info(`Found ${allPages.length} pages to back up`);
+      console.info(`Found ${allPages.length} pages to evaluate for backup`);
 
       // Get enabled providers
       const enabledProviderNames = getEnabledProviders(this.settings);
       if (enabledProviderNames.length === 0) {
-        logseq.UI.showMsg('No backup providers enabled. Please configure a provider first.', 'warning');
+        this.showNotification('No backup providers enabled. Please configure a provider first.', 'warning');
         return;
       }
+
+      console.info(`Enabled providers: ${enabledProviderNames.join(', ')}`);
 
       // Initialize tracking variables
       let successCount = 0;
       let errorCount = 0;
+      let skippedCount = 0;
 
       // Reset processed assets set
       processedAssets.clear();
@@ -271,21 +304,33 @@ export class BackupService {
       for (let i = 0; i < allPages.length; i++) {
         const page = allPages[i];
         try {
-          // Update progress periodically
-          if (i % 10 === 0 || i === allPages.length - 1) {
-            logseq.UI.showMsg(`Backing up pages: ${i + 1} of ${allPages.length}`, 'info');
-          }
-
           // Skip special system pages
           if (page.name.startsWith('logseq-') || page.name === 'contents' || page.name === 'card') {
             console.debug(`Skipping system page: ${page.name}`);
+            skippedCount++;
             continue;
           }
 
           // Skip tag pages
           if (detectTagPage(page)) {
             console.debug(`Skipping tag page: ${page.name}`);
+            skippedCount++;
             continue;
+          }
+
+          // Check tag filtering if in tagged mode
+          if (this.settings.backupMode === 'tagged') {
+            const pageTags = await getPageTags(page.name);
+            if (!shouldBackupPage(pageTags, this.settings)) {
+              console.debug(`Skipping page ${page.name} (no matching tags)`);
+              skippedCount++;
+              continue;
+            }
+          }
+
+          // Update progress periodically
+          if (i % 10 === 0 || i === allPages.length - 1) {
+            this.showNotification(`Backing up: ${successCount} done, ${i + 1}/${allPages.length} processed`, 'info');
           }
 
           // Back up this page
@@ -314,16 +359,14 @@ export class BackupService {
           if (pageBackupSuccessful) {
             successCount++;
 
-            // Check if page has a file object (which might indicate assets)
-            if (page.file && page.file.id) {
-              // This page likely contains assets, prioritize searching them
-              const assetsInPage = await findAssetsInPage(page.name);
-
-              // Backup each unique asset
+            // Backup linked assets if present
+            const assetsInPage = await findAssetsInPage(page.name);
+            if (assetsInPage.length > 0) {
+              const graphName = await this.getGraphName();
               for (const assetPath of assetsInPage) {
                 if (!processedAssets.has(assetPath)) {
                   processedAssets.add(assetPath);
-                  await this.backupAsset(assetPath);
+                  await this.backupAsset(assetPath, graphName);
                 }
               }
             }
@@ -338,32 +381,102 @@ export class BackupService {
 
       // Final summary notification
       let summaryMessage = `Backup completed: ${successCount} pages backed up`;
-      if (errorCount > 0) {
-        summaryMessage += `, ${errorCount} pages failed`;
+      if (skippedCount > 0) {
+        summaryMessage += `, ${skippedCount} skipped`;
       }
-      logseq.UI.showMsg(summaryMessage, errorCount > 0 ? 'warning' : 'success');
+      if (errorCount > 0) {
+        summaryMessage += `, ${errorCount} failed`;
+      }
+      this.showNotification(summaryMessage, errorCount > 0 ? 'warning' : 'success');
     } catch (error) {
       console.error('Error during backupAllPages:', error);
-      logseq.UI.showMsg(`Error during backup: ${error instanceof Error ? error.message : String(error)}`, 'error');
+      this.showNotification(`Error during backup: ${error instanceof Error ? error.message : String(error)}`, 'error');
     }
   }
 
   /**
-   * Backs up a single asset
-   * @param assetPath Path of the asset to backup
+   * Backs up a single asset file
+   * @param assetPath Relative path of the asset (e.g., ./assets/image.png)
+   * @param graphName Name of the current graph
    */
-  private async backupAsset(assetPath: string): Promise<boolean> {
+  private async backupAsset(assetPath: string, graphName: string): Promise<boolean> {
     try {
-      // Implement asset backup logic here
-      console.log(`Backing up asset: ${assetPath}`);
+      // Normalize the path
+      const normalizedPath = assetPath.replace(/^\.\//, '');
 
-      // Example: If assets are just files, you might copy them to a backup location
-      // await fileSystem.copy(assetPath, `${backupLocation}/${path.basename(assetPath)}`);
+      // Get the graph info to construct the full file path
+      const graph = await logseq.App.getCurrentGraph();
+      if (!graph || !graph.path) {
+        console.error('Cannot determine graph path for asset backup');
+        return false;
+      }
 
-      return true;
+      // Construct the full file URL
+      const fullPath = `${graph.path}/${normalizedPath}`;
+
+      console.debug(`Backing up asset: ${fullPath}`);
+
+      // Try to read the asset file using fetch (works for local file:// URLs in Electron)
+      let assetData: Uint8Array;
+      try {
+        const response = await fetch(`file://${fullPath}`);
+        if (!response.ok) {
+          console.warn(`Cannot read asset file: ${fullPath} (${response.status})`);
+          return false;
+        }
+        const buffer = await response.arrayBuffer();
+        assetData = new Uint8Array(buffer);
+      } catch (fetchError) {
+        // Fallback: try using logseq.Assets API if available
+        console.warn(`Fetch failed for asset, trying alternative: ${fetchError}`);
+        return false;
+      }
+
+      // Create metadata for the asset
+      const fileName = normalizedPath.split('/').pop() || 'unknown';
+      const timestamp = new Date().toISOString();
+
+      const metadata = {
+        timestamp,
+        version: '1.0',
+        graphName,
+        pageName: '',
+        fileType: 'asset' as const,
+        filePath: normalizedPath,
+        fileName,
+        size: assetData.byteLength
+      };
+
+      // Upload to all enabled providers
+      let successCount = 0;
+      for (const [providerName, provider] of Object.entries(this.providers)) {
+        try {
+          const success = await provider.backup(assetData, metadata);
+          if (success) {
+            successCount++;
+            console.debug(`Asset ${normalizedPath} backed up to ${providerName}`);
+          }
+        } catch (providerError) {
+          console.error(`Failed to backup asset to ${providerName}:`, providerError);
+        }
+      }
+
+      return successCount > 0;
     } catch (error) {
       console.error(`Error backing up asset ${assetPath}:`, error);
       return false;
+    }
+  }
+
+  /**
+   * Get the current graph name
+   */
+  private async getGraphName(): Promise<string> {
+    try {
+      const graph = await logseq.App.getCurrentGraph();
+      return graph?.name || 'default';
+    } catch {
+      return 'default';
     }
   }
 }

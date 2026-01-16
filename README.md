@@ -5,89 +5,124 @@
 
 ![Logseq Super Sync](icon.png)
 
-A Logseq plugin for automatic page backup and synchronization with cloud storage services.
+A Logseq plugin for automatic page backup and synchronization with multiple cloud storage services.
 
 ![Screenshot of Logseq Super Sync](screenshot.png)
 
 ## Features
 
-- [ ] **S3 Cloud Backup**
-  - Automatically backup to AWS S3 or any S3-compatible service (MinIO, DigitalOcean Spaces, etc.)
-  - [ ] Intelligent file diff detection to avoid redundant uploads
-  - Maintains original file structure (journals/pages directory hierarchy)
+### 🚀 Supported Backup Providers
 
-- [x] **Automatic Sync Options**
-  - Real-time backup after changes (with debouncing)
-  - One-click manual backup through toolbar button
-  - Slash command support (`/Backup All Pages`)
+| Provider | Description |
+|----------|-------------|
+| **☁️ S3** | AWS S3, MinIO, Cloudflare R2, DigitalOcean Spaces |
+| **🌐 WebDAV** | Nextcloud, Synology, 坚果云 (JianGuoYun), ownCloud |
+| **💾 Local** | Backup to local filesystem |
 
-- [ ] **Git**
-- [ ] **WebDAV**
-- [ ] **Local filesystem backup**
-- [ ] **Restore functionality**
-- [ ] **Conflict resolution**
+### 📦 Core Features
+
+- **Multiple Providers** - Backup to multiple destinations simultaneously
+- **Automatic Sync** - Real-time backup after editing stops (smart debouncing)
+- **Tag Filtering** - Backup all pages or only pages with specific tags
+- **Linked Assets** - Automatically backup images and attachments
+- **File Structure** - Maintains original directory structure (journals/pages/assets)
+- **One-Click Backup** - Toolbar button and slash command support
 
 ## Installation
 
 ### From Marketplace (Recommended)
 
-1. Open Logseq
-2. Click on the "..." menu in the top-right corner
-3. Select "Plugins"
-4. Find "Super Sync" in the marketplace and click "Install"
+1. Open Logseq → **...** menu → **Plugins**
+2. Search for "Super Sync" and click **Install**
 
 ### Manual Installation
 
-1. Download the latest release ZIP file from [GitHub Releases](https://github.com/your-username/logseq-super-sync/releases/latest)
-2. Extract the ZIP file
-3. In Logseq, go to Settings > Features > Advanced > Developer mode
-4. Click on "Load unpacked plugin"
-5. Select the extracted directory
+1. Download the latest release from [GitHub Releases](https://github.com/top/logseq-super-sync/releases)
+2. In Logseq, enable **Developer mode** in Settings
+3. Click **Load unpacked plugin** and select the extracted folder
 
 ## Configuration
 
-1. Open Logseq Settings
-2. Navigate to the "Super Sync" plugin settings
-3. Configure your preferred backup provider:
+Open Logseq Settings → **Super Sync** to configure:
 
-### S3 Configuration
+### 🔧 General Settings
 
-- **Bucket Name**: Name of your S3 bucket
-- **Region**: AWS region (e.g., `us-east-1`)
-- **Access Key ID**: Your AWS access key ID
-- **Secret Access Key**: Your AWS secret access key
-- **Path Prefix** (optional): Folder path within the bucket (e.g., `logseq-backup/`)
-- **Custom Endpoint** (optional): For S3-compatible services like MinIO
+| Setting | Description | Default |
+|---------|-------------|---------|
+| **Backup Mode** | `all` (all pages) or `tagged` (only tagged pages) | `all` |
+| **Backup Tags** | Comma-separated tags for tagged mode | - |
+| **Wait Time** | Seconds to wait after editing stops | `15` |
+| **Show Notifications** | Show backup success/failure messages | `true` |
+
+### ☁️ S3 Configuration
+
+| Setting | Description |
+|---------|-------------|
+| **Enable** | Toggle S3 backup on/off |
+| **Bucket Name** | S3 bucket name (required) |
+| **Region** | AWS region (e.g., `us-east-1`) |
+| **Access Key ID** | AWS access key (required) |
+| **Secret Access Key** | AWS secret key (required) |
+| **Path Prefix** | Folder path in bucket |
+| **Custom Endpoint** | For S3-compatible services |
+
+### 🌐 WebDAV Configuration
+
+| Setting | Description |
+|---------|-------------|
+| **Enable** | Toggle WebDAV backup on/off |
+| **Server URL** | WebDAV server address |
+| **Username** | WebDAV username (required) |
+| **Password** | WebDAV password (required) |
+| **Path Prefix** | Folder on server |
+
+### 💾 Local Backup
+
+| Setting | Description |
+|---------|-------------|
+| **Enable** | Toggle local backup on/off |
+| **Backup Path** | Full path to backup directory |
 
 ## Usage
 
 ### Toolbar Button
-
-Click the cloud upload icon (📤) in the toolbar to start a full backup.
+Click the **📤** icon in the toolbar to start a full backup.
 
 ### Slash Commands
-
-Type `/Backup All Pages` in the editor to trigger a full backup.
+Type `/Backup All Pages` in the editor.
 
 ### Automatic Backup
+Pages are backed up automatically after you stop editing for the configured wait time (default: 15 seconds).
 
-Pages are automatically backed up after changes when the "Enable automatic backup" setting is turned on.
+## Troubleshooting
+
+### No data appearing in backup destination
+
+1. **Check if provider is enabled**: Open settings and make sure the "Enable" toggle is ON for your provider
+2. **Check browser console**: Press F12 in Logseq and look for `[SuperSync]` messages
+   - You should see: `[SuperSync] Initializing with X enabled providers: ['s3']`
+   - If you see: `[SuperSync] No providers enabled! Check settings.` - enable the provider in settings
+
+### Common Issues
+
+| Issue | Solution |
+|-------|----------|
+| "No backup providers enabled" warning | Enable S3/WebDAV/Local toggle in settings |
+| S3 upload fails | Check bucket name, credentials, and endpoint (for MinIO) |
+| WebDAV fails | Verify URL format and credentials |
 
 ## Development
 
-1. Clone this repository
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Run development server:
-   ```bash
-   npm run dev
-   ```
-4. Build for production:
-   ```bash
-   npm run build
-   ```
+```bash
+# Install dependencies
+npm install
+
+# Run development server
+npm run dev
+
+# Build for production
+npm run build
+```
 
 ## License
 

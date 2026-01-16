@@ -1,10 +1,9 @@
-import JSZip from 'jszip';
 import { BackupMetadata } from '../providers/provider.interface';
 
 /**
  * Creates a backup of a specific page
  * @param pageName The name of the page to back up
- * @returns Promise with backup data and metadata, or null if backup fails
+ * @returns Promise with backup data (raw markdown as Uint8Array) and metadata, or null if backup fails
  */
 export async function createPageBackup(pageName: string): Promise<{ data: Uint8Array, metadata: BackupMetadata } | null> {
   try {
@@ -14,7 +13,7 @@ export async function createPageBackup(pageName: string): Promise<{ data: Uint8A
       throw new Error('No graph is currently open');
     }
 
-    console.info('Creating backup for page:', pageName);
+    console.debug('Creating backup for page:', pageName);
 
     // Get the page by name
     const page = await logseq.Editor.getPage(pageName);
@@ -26,7 +25,7 @@ export async function createPageBackup(pageName: string): Promise<{ data: Uint8A
     // Check if this page is a tag page that should be skipped
     const isTagPage = detectTagPage(page);
     if (isTagPage) {
-      console.info(`Skipping tag page: ${pageName}`);
+      console.debug(`Skipping tag page: ${pageName}`);
       return null;
     }
 
@@ -37,8 +36,6 @@ export async function createPageBackup(pageName: string): Promise<{ data: Uint8A
     // Check if it's a journal page (date format) or regular page
     if (page.journalDay) {
       // Journal pages are stored in journals/ with format YYYY_MM_DD.md
-
-      // For journal pages, extract date directly from journalDay
       const journalDayStr = String(page.journalDay);
       const year = journalDayStr.substring(0, 4);
       const month = journalDayStr.substring(4, 6);
@@ -47,10 +44,8 @@ export async function createPageBackup(pageName: string): Promise<{ data: Uint8A
       filePath = `journals/${fileName}`;
     } else {
       // Regular pages are stored in pages/ with file-safe versions of their names
-      // For simplicity, we'll use the page.name which should be close to the file name
       fileName = `${page.name.replace(/ /g, '_').replace(/[^\w\d_.-]/g, '').toLowerCase()}.md`;
       filePath = `pages/${fileName}`;
-      console.debug(`Regular page detected: ${fileName}`);
     }
 
     // Get page blocks (content)
@@ -107,13 +102,11 @@ export async function createPageBackup(pageName: string): Promise<{ data: Uint8A
       pageContent += formatBlock(block);
     }
 
-    // Create a ZIP file to maintain directory structure
-    const zip = new JSZip();
+    // Convert markdown string to Uint8Array
+    const encoder = new TextEncoder();
+    const data = encoder.encode(pageContent);
 
-    // Add the page content to the zip using the correct path
-    zip.file(filePath, pageContent);
-
-    // Add manifest with backup info
+    // Create metadata
     const timestamp = new Date().toISOString();
     const metadata: BackupMetadata = {
       timestamp: timestamp,
@@ -124,27 +117,13 @@ export async function createPageBackup(pageName: string): Promise<{ data: Uint8A
       filePath: filePath,
       fileName: fileName,
       journalDay: page.journalDay?.toString() || undefined,
-      size: 0 // Will be updated after compression
+      size: data.byteLength
     };
 
-    zip.file('manifest.json', JSON.stringify(metadata, null, 2));
-
-    // Generate the zip file as a Uint8Array
-    const zipData = await zip.generateAsync({
-      type: 'uint8array',
-      compression: 'DEFLATE',
-      compressionOptions: {
-        level: 9 // Maximum compression
-      }
-    });
-
-    // Update the size in metadata
-    metadata.size = zipData.byteLength;
-
-    console.info(`Successfully created backup for ${filePath} (${zipData.byteLength} bytes)`);
+    console.debug(`Created backup for ${filePath} (${data.byteLength} bytes)`);
 
     return {
-      data: zipData,
+      data,
       metadata
     };
   } catch (error) {
@@ -264,4 +243,66 @@ export function detectTagPage(page: any): boolean {
   }
 
   return false;
+}
+
+/**
+ * Get tags associated with a page
+ * @param page The page object
+ * @returns Array of tag names (lowercase)
+ */
+export async function getPageTags(pageName: string): Promise<string[]> {
+  const tags: string[] = [];
+
+  try {
+    const page = await logseq.Editor.getPage(pageName);
+    if (!page) return tags;
+
+    // 1. Get tags from page properties
+    if (page.properties) {
+      // Check for 'tags' property (array or string)
+      const pageTags = page.properties.tags || page.properties['tags'];
+      if (pageTags) {
+        if (Array.isArray(pageTags)) {
+          tags.push(...pageTags.map((t: any) => String(t).toLowerCase()));
+        } else if (typeof pageTags === 'string') {
+          // Could be comma-separated or space-separated
+          const splitTags = pageTags.split(/[,\s]+/).filter((t: string) => t.trim());
+          tags.push(...splitTags.map(t => t.toLowerCase()));
+        }
+      }
+    }
+
+    // 2. Check page blocks for inline tags (e.g., #tag)
+    const blocks = await logseq.Editor.getPageBlocksTree(pageName);
+    if (blocks) {
+      const extractTagsFromBlock = (block: any) => {
+        if (block.content) {
+          // Match #tag or [[tag]] patterns
+          const hashTagRegex = /#([a-zA-Z0-9_-]+)/g;
+          let match;
+          while ((match = hashTagRegex.exec(block.content)) !== null) {
+            const tag = match[1].toLowerCase();
+            if (!tags.includes(tag)) {
+              tags.push(tag);
+            }
+          }
+        }
+
+        // Process children
+        if (block.children && block.children.length > 0) {
+          for (const child of block.children) {
+            extractTagsFromBlock(child);
+          }
+        }
+      };
+
+      for (const block of blocks) {
+        extractTagsFromBlock(block);
+      }
+    }
+  } catch (error) {
+    console.error(`Error getting tags for page ${pageName}:`, error);
+  }
+
+  return [...new Set(tags)]; // Remove duplicates
 }

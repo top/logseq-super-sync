@@ -1,4 +1,4 @@
-import { Settings } from '../core/settings';
+import { Settings, getEnabledProviders } from '../core/settings';
 import { BackupService } from '../services/backup-service';
 
 /**
@@ -11,19 +11,8 @@ export function setupToolbar(settings: Settings, backupService?: BackupService) 
   logseq.Editor.registerSlashCommand(
     'Backup All Pages',
     async () => {
-      logseq.UI.showMsg('Starting backup of all pages...');
-
       if (backupService) {
         await backupService.backupAllPages();
-      } else {
-        // Call through the model when no direct service reference
-        logseq.UI.showMsg('Starting backup of all pages...');
-        logseq.provideUI({
-          key: 'backupAllPages',
-          slot: '',
-          reset: true,
-          template: '<div>Backup in progress...</div>'
-        });
       }
     }
   );
@@ -41,20 +30,21 @@ export function setupToolbar(settings: Settings, backupService?: BackupService) 
   // Register direct action handler
   logseq.provideModel({
     async startFullBackup() {
-      // Show immediate feedback
-      logseq.UI.showMsg('Starting full backup of all pages and assets...', 'info');
+      // Get current settings to check enabled providers
+      const currentSettings = Object.assign({}, settings, logseq.settings) as Settings;
+      const enabledProviders = getEnabledProviders(currentSettings);
+
+      if (enabledProviders.length === 0) {
+        logseq.UI.showMsg(
+          '⚠️ No backup providers enabled. Please configure S3/WebDAV/Local in settings first.',
+          'warning'
+        );
+        return;
+      }
 
       try {
         if (backupService) {
           await backupService.backupAllPages();
-        } else {
-          // Fallback to model
-          logseq.provideUI({
-            key: 'backupAllPages',
-            slot: '',
-            reset: true,
-            template: '<div>Backup in progress...</div>'
-          });
         }
       } catch (error) {
         console.error('Error during backup:', error);
